@@ -3,6 +3,8 @@ package uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import com.github.tomakehurst.wiremock.client.WireMock.get
+import com.github.tomakehurst.wiremock.client.WireMock.put
+import com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 import org.junit.jupiter.api.extension.AfterAllCallback
 import org.junit.jupiter.api.extension.BeforeAllCallback
 import org.junit.jupiter.api.extension.BeforeEachCallback
@@ -41,6 +43,43 @@ class PrisonApiMockServer : WireMockServer(WIREMOCK_PORT) {
         aResponse()
           .withHeader("Content-Type", "application/json")
           .withBody(if (status == 200) """{"status":"UP"}""" else """{"status":"DOWN"}""")
+          .withStatus(status),
+      ),
+    )
+  }
+
+  /**
+   * The cell move. Matched on the URL path only, so a test asserting the query string (reasonCode,
+   * lockTimeout) does so explicitly rather than relying on the stub to fail silently.
+   */
+  fun stubMoveToCell(bookingId: Long, locationKey: String, bedAssignmentHistorySequence: Int? = 2) {
+    stubFor(
+      put(urlPathEqualTo("/api/bookings/$bookingId/living-unit/$locationKey")).willReturn(
+        aResponse()
+          .withHeader("Content-Type", "application/json")
+          .withBody(
+            """
+              {
+                "bookingId": $bookingId,
+                "agencyId": "MDI",
+                "assignedLivingUnitId": 25700,
+                "assignedLivingUnitDesc": "$locationKey",
+                "bedAssignmentHistorySequence": $bedAssignmentHistorySequence
+              }
+            """.trimIndent(),
+          )
+          .withStatus(200),
+      ),
+    )
+  }
+
+  /** Any failure from the move, e.g. 400 for a full cell or 423 when the record is open in P-NOMIS. */
+  fun stubMoveToCellFails(bookingId: Long, locationKey: String, status: Int, body: String = """{"status":$status}""") {
+    stubFor(
+      put(urlPathEqualTo("/api/bookings/$bookingId/living-unit/$locationKey")).willReturn(
+        aResponse()
+          .withHeader("Content-Type", "application/json")
+          .withBody(body)
           .withStatus(status),
       ),
     )
