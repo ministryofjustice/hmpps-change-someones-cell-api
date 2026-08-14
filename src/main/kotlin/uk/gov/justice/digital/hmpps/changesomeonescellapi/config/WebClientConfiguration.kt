@@ -20,6 +20,7 @@ class WebClientConfiguration(
   @param:Value("\${hmpps-auth.url}") val hmppsAuthBaseUri: String,
   @param:Value("\${prison-api.url}") val prisonApiBaseUri: String,
   @param:Value("\${case-notes-api.url}") val caseNotesApiBaseUri: String,
+  @param:Value("\${prisoner-search.url}") val prisonerSearchBaseUri: String,
   @param:Value("\${api.health-timeout:2s}") val healthTimeout: Duration,
   @param:Value("\${api.timeout:20s}") val timeout: Duration,
 ) {
@@ -103,4 +104,22 @@ class WebClientConfiguration(
 
   @Bean
   fun caseNotesApiHealthWebClient(builder: WebClient.Builder): WebClient = builder.healthWebClient(caseNotesApiBaseUri, healthTimeout)
+
+  // prisoner-search resolves a prisoner number to their current booking id and cell. It is the
+  // go-to source for prisoner data - a near real-time projection of NOMIS - and using it keeps
+  // bookingId, a NOMIS-only concept, out of our API contract.
+  @Bean
+  @RequestScope(proxyMode = ScopedProxyMode.INTERFACES)
+  fun prisonerSearchWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    builder: WebClient.Builder,
+  ): WebClient = builder.authorisedWebClient(
+    authorizedClientManager,
+    registrationId = SYSTEM_USERNAME,
+    url = prisonerSearchBaseUri,
+    timeout,
+  )
+
+  @Bean
+  fun prisonerSearchHealthWebClient(builder: WebClient.Builder): WebClient = builder.healthWebClient(prisonerSearchBaseUri, healthTimeout)
 }

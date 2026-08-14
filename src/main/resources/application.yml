@@ -6,6 +6,9 @@ spring:
   application:
     name: hmpps-change-someones-cell-api
 
+  jackson:
+    time-zone: "Europe/London"
+
 #  This jackson configuration is only applied for java.util.Date.
 #  It is ignored for LocalDateTime, and therefore unnecessary for most projects
 #  jackson:
