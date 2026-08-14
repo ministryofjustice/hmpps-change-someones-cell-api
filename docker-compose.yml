@@ -1,9 +1,9 @@
 services:
-  hmpps-template-kotlin:
-    image: ghcr.io/ministryofjustice/hmpps-template-kotlin:latest
+  hmpps-change-someones-cell-api:
+    image: ghcr.io/ministryofjustice/hmpps-change-someones-cell-api:latest
     networks:
       - hmpps
-    container_name: hmpps-template-kotlin
+    container_name: hmpps-change-someones-cell-api
     ports:
       - "8080:8080"
     healthcheck:
