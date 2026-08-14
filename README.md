@@ -4,102 +4,53 @@
 [![Docker Repository on ghcr](https://img.shields.io/badge/ghcr.io-repository-2496ED.svg?logo=docker)](https://ghcr.io/ministryofjustice/hmpps-change-someones-cell-api)
 [![API docs](https://img.shields.io/badge/API_docs_-view-85EA2D.svg?logo=swagger)](https://change-someones-cell-api-dev.hmpps.service.justice.gov.uk/swagger-ui/index.html)
 
-Template github repo used for new Kotlin based projects.
+Cell movement API for HMPPS. Records a prisoner's move to a different cell, orchestrating the
+NOMIS move, the `MOVED_CELL` case note and this service's own record of why the move happened.
 
-# Instructions
+It replaces the `/cell/*` endpoints of `whereabouts-api`, which is being decommissioned.
+Whereabouts did not simply proxy a cell move: it also owned a `CELL_MOVE_REASON` table linking a
+move to its case note, which existed nowhere else. The background, the options considered and the
+phasing are recorded in
+[`docs/cell-move-architecture-and-replatform.md`](https://github.com/ministryofjustice/hmpps-change-someones-cell/blob/main/docs/cell-move-architecture-and-replatform.md)
+in the UI repo, under epic MAPA-275.
 
-If this is a HMPPS project then the project will be created as part of bootstrapping -
-see [hmpps-project-bootstrap](https://github.com/ministryofjustice/hmpps-project-bootstrap). You are able to specify a
-template application using the `github_template_repo` attribute to clone without the need to manually do this yourself
-within GitHub.
+Consumers:
 
-This project is community managed by the mojdt `#kotlin-dev` slack channel.
-Please raise any questions or queries there. Contributions welcome!
+- [`hmpps-change-someones-cell`](https://github.com/ministryofjustice/hmpps-change-someones-cell) - the UI that performs cell and reception moves
+- [`hmpps-prisoner-profile`](https://github.com/ministryofjustice/hmpps-prisoner-profile) - reads "what happened" on the location history page
 
-Our security policy is located [here](https://github.com/ministryofjustice/hmpps-change-someones-cell-api/security/policy).
+## Roles
 
-Documentation to create new service is located [here](https://tech-docs.hmpps.service.justice.gov.uk/creating-new-services/).
+| Role | Purpose |
+|---|---|
+| `ROLE_CELL_MOVEMENTS__RO` | Read cell movements |
+| `ROLE_CELL_MOVEMENTS__RW` | Record a cell movement |
+| `ROLE_CELL_MOVEMENTS__SYNC__RW` | NOMIS sync and migration |
 
-## Creating a Cloud Platform namespace
+Every endpoint must carry `@PreAuthorize`; `ResourceSecurityTest` fails the build otherwise.
+Note whereabouts required no role at all for a cell move, so this is a deliberate tightening.
 
-When deploying to a new namespace, you may wish to use the
-[templates project namespace](https://github.com/ministryofjustice/cloud-platform-environments/tree/main/namespaces/live.cloud-platform.service.justice.gov.uk/hmpps-templates-dev)
-as the basis for your new namespace. This namespace contains both the kotlin and typescript template projects,
-which is the usual way that projects are setup.
+## Authentication to downstream services
 
-Copy this folder and update all the existing namespace references to correspond to the environment to which you're deploying.
+Calls to prison-api and offender-case-notes must carry the **end user's** username, not just this
+service's client credentials: prison-api's cell move is `@ProxyUser` so NOMIS audit columns record
+the real user, and offender-case-notes rejects `MOVED_CELL` without a NOMIS user.
 
-If you only need the kotlin configuration then remove all typescript references and remove the elasticache configuration.
+`WebClientConfiguration` therefore overrides the autoconfigured `OAuth2AuthorizedClientManager`
+with `usernameAwareTokenRequestOAuth2AuthorizedClientManager` from hmpps-kotlin-lib. That manager
+reads the authentication when it is *constructed*, so it and the authenticated web clients are
+request scoped - see the comments in that class before changing the scoping.
+`UsernamePropagationTest` guards the behaviour.
 
-To ensure the correct github teams can approve releases, you will need to make changes to the configuration in `resources/service-account-github` where the appropriate team names will need to be added (based on [lines 98-100](https://github.com/ministryofjustice/cloud-platform-environments/blob/main/namespaces/live.cloud-platform.service.justice.gov.uk/hmpps-templates-dev/resources/serviceaccount-github.tf#L98) and the reference appended to the teams list below [line 112](https://github.com/ministryofjustice/cloud-platform-environments/blob/main/namespaces/live.cloud-platform.service.justice.gov.uk/hmpps-templates-dev/resources/serviceaccount-github.tf#L112)). Note: hmpps-sre is in this list to assist with deployment issues.
+## Database
 
-Submit a PR to the Cloud Platform team in [#ask-cloud-platform](https://moj.enterprise.slack.com/archives/C57UPMZLY).
-Further instructions from the Cloud Platform team can be found in the [Cloud Platform User Guide](https://user-guide.cloud-platform.service.justice.gov.uk/#cloud-platform-user-guide)
+Postgres, with Flyway migrations in `src/main/resources/db/migration`. `ddl-auto` is `none`, so the
+schema only ever comes from migrations. The RDS instance lives in the
+`hmpps-prisoner-cell-allocation-{dev,preprod,prod}` namespaces, which this service shares with the
+UI rather than having its own.
 
-## Renaming from HMPPS Change Someones Cell Api - github Actions
-
-Once the new repository is deployed. Navigate to the repository in github, and select the `Actions` tab.
-Click the link to `Enable Actions on this repository`.
-
-Find the Action workflow named: `rename-project-create-pr` and click `Run workflow`. This workflow will
-execute the `rename-project.bash` and create Pull Request for you to review. Review the PR and merge.
-
-Note: ideally this workflow would run automatically however due to a recent change github Actions are not
-enabled by default on newly created repos. There is no way to enable Actions other then to click the button in the UI.
-If this situation changes we will update this project so that the workflow is triggered during the bootstrap project.
-Further reading: <https://github.community/t/workflow-isnt-enabled-in-repos-generated-from-template/136421>
-
-The script takes six arguments:
-
-### New project name
-
-This should start with `hmpps-` e.g. `hmpps-prison-visits` so that it can be easily distinguished in github from
-other departments projects. Try to avoid using abbreviations so that others can understand easily what your project is.
-
-### Slack channel for release notifications
-
-By default, release notifications are only enabled for production. The circleci configuration can be amended to send
-release notifications for deployments to other environments if required. Note that if the configuration is amended,
-the slack channel should then be amended to your own team's channel as `dps-releases` is strictly for production release
-notifications. If the slack channel is set to something other than `dps-releases`, production release notifications
-will still automatically go to `dps-releases` as well. This is configured by `releases-slack-channel` in
-`.circleci/config.yml`.
-
-### Slack channel for pipeline security notifications
-
-Ths channel should be specific to your team and is for daily / weekly security scanning job results. It is your team's
-responsibility to keep up-to-date with security issues and update your application so that these jobs pass. You will
-only be notified if the jobs fail. The scan results can always be found in circleci for your project. This is
-configured by `alerts-slack-channel` in `.circleci/config.yml`.
-
-### Non production kubernetes alerts
-
-By default Prometheus alerts are created in the application namespaces to monitor your application e.g. if your
-application is crash looping, there are a significant number of errors from the ingress. Since Prometheus runs in
-cloud platform AlertManager needs to be setup first with your channel. Please see
-[Create your own custom alerts](https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html)
-in the Cloud Platform user guide. Once that is setup then the `custom severity label` can be used for
-`alertSeverity` in the `helm_deploy/values-*.yaml` configuration.
-
-Normally it is worth setting up two separate labels and therefore two separate slack channels - one for your production
-alerts and one for your non-production alerts. Using the same channel can mean that production alerts are sometimes
-lost within non-production issues.
-
-### Production kubernetes alerts
-
-This is the severity label for production, determined by the `custom severity label`. See the above
-[Non production kubernetes alerts section](non-production-kubernetes-alerts) for more information. This is configured in `helm_deploy/values-prod.yaml`.
-
-### Product ID
-
-This is so that we can link a component to a product and thus provide team and product information in the Developer
-Portal. Refer to the developer portal at <https://developer-portal.hmpps.service.justice.gov.uk/products> to find your
-product id. This is configured in `helm_deploy/<project_name>/values.yaml`.
-
-## Manually branding from template app
-
-Run the `rename-project.bash` without any arguments. This will prompt for the six required parameters and create a PR.
-The script requires a recent version of `bash` to be installed, as well as GNU `sed` in the path.
+Tests reuse a Postgres already listening on 5432 if there is one, and otherwise start a
+testcontainer, so `docker compose up` first makes the test loop faster but is not required.
 
 ## Common Kotlin patterns
 

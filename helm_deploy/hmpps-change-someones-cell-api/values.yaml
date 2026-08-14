@@ -37,6 +37,26 @@ generic-service:
   namespace_secrets:
     hmpps-change-someones-cell-api-application-insights:
       APPLICATIONINSIGHTS_CONNECTION_STRING: "APPLICATIONINSIGHTS_CONNECTION_STRING"
+    hmpps-change-someones-cell-api-client-creds:
+      SYSTEM_CLIENT_ID: "SYSTEM_CLIENT_ID"
+      SYSTEM_CLIENT_SECRET: "SYSTEM_CLIENT_SECRET"
+    rds-postgresql-instance-output:
+      DATABASE_ENDPOINT: "rds_instance_endpoint"
+      DATABASE_NAME: "database_name"
+      DATABASE_USERNAME: "database_username"
+      DATABASE_PASSWORD: "database_password"
+      SPRING_FLYWAY_USER: "database_username"
+      SPRING_FLYWAY_PASSWORD: "database_password"
+
+  # Set explicitly rather than inherited. The hmpps-prisoner-cell-allocation namespaces default
+  # containers to a 1024Mi memory limit (02-limitrange.yaml), which a JVM can exceed.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 1024Mi
 
 generic-prometheus-alerts:
   targetApplication: hmpps-change-someones-cell-api

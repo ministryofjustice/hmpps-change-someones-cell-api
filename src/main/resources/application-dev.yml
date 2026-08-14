@@ -1,2 +1,22 @@
 hmpps-auth:
   url: "http://localhost:8090/auth"
+
+prison-api:
+  url: "http://localhost:8091"
+
+case-notes-api:
+  url: "http://localhost:8092"
+
+system:
+  client:
+    id: ${SYSTEM_CLIENT_ID:hmpps-change-someones-cell-api-client}
+    secret: ${SYSTEM_CLIENT_SECRET:clientsecret}
+
+spring:
+  datasource:
+    # A local Postgres presents no CA we can verify against, so relax the production
+    # sslmode=verify-full. Defaults let `./gradlew bootRun --args='--spring.profiles.active=dev'`
+    # work against docker compose without exporting anything.
+    url: 'jdbc:postgresql://${DATABASE_ENDPOINT:localhost:5432}/${DATABASE_NAME:change_someones_cell}?sslmode=prefer'
+    username: ${DATABASE_USERNAME:change_someones_cell}
+    password: ${DATABASE_PASSWORD:change_someones_cell}

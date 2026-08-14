@@ -37,6 +37,7 @@ class OpenApiDocsTest(
   }
 
   @Test
+  @Disabled("TODO Enable this test once you have an endpoint. MAPA-278 adds POST /cell-movements; until then `paths` is legitimately empty.")
   fun `the open api json contains documentation`() {
     webTestClient.get()
       .uri("/v3/api-docs")

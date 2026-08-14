@@ -18,6 +18,12 @@ spring:
           jwk-set-uri: ${hmpps-auth.url}/.well-known/jwks.json
 
       client:
+        registration:
+          HMPPS_CHANGE_SOMEONES_CELL_API:
+            provider: hmpps-auth
+            client-id: ${system.client.id}
+            client-secret: ${system.client.secret}
+            authorization-grant-type: client_credentials
         provider:
           hmpps-auth:
             token-uri: ${hmpps-auth.url}/oauth/token
@@ -27,6 +33,27 @@ spring:
   web:
     error:
       include-message: always
+
+  jpa:
+    open-in-view: false
+    show-sql: false
+    generate-ddl: false
+    hibernate:
+      ddl-auto: none
+
+  flyway:
+    enabled: true
+
+  datasource:
+    url: 'jdbc:postgresql://${DATABASE_ENDPOINT}/${DATABASE_NAME}?sslmode=verify-full'
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+    hikari:
+      pool-name: CSC-API-DB-CP
+      maximum-pool-size: 20
+      max-lifetime: 600000
+      connection-timeout: 1000
+      validation-timeout: 500
 
 server:
   port: 8080
@@ -58,8 +85,15 @@ management:
       cache:
         time-to-live: 2000ms
 
+# springdoc hardcodes the swagger-ui version it was built against (springdoc.config.properties inside
+# springdoc-openapi-starter-common) and serves /swagger-ui/** from /webjars/swagger-ui/<that version>/.
+# The HMPPS gradle plugin pins the swagger-ui webjar ahead of springdoc to remediate a DOMPurify issue,
+# so springdoc looks for a directory that is not on the classpath and /swagger-ui/index.html 404s.
+# Keep this in step with the webjar the plugin resolves — check with:
+#   ./gradlew -q dependencies --configuration runtimeClasspath | grep swagger-ui
 springdoc:
-  api-docs:
-    enabled: false
   swagger-ui:
+    enabled: false
+    version: 5.32.11
+  api-docs:
     enabled: false
