@@ -37,9 +37,12 @@ generic-service:
   namespace_secrets:
     hmpps-change-someones-cell-api-application-insights:
       APPLICATIONINSIGHTS_CONNECTION_STRING: "APPLICATIONINSIGHTS_CONNECTION_STRING"
+    # The keys in this secret are API_CLIENT_ID / API_CLIENT_SECRET - that is what the
+    # cloud-platform-terraform-hmpps-template module creates. Do not rename the right-hand side
+    # to match the env var names; the container fails to start if these keys do not exist.
     hmpps-change-someones-cell-api-client-creds:
-      SYSTEM_CLIENT_ID: "SYSTEM_CLIENT_ID"
-      SYSTEM_CLIENT_SECRET: "SYSTEM_CLIENT_SECRET"
+      SYSTEM_CLIENT_ID: "API_CLIENT_ID"
+      SYSTEM_CLIENT_SECRET: "API_CLIENT_SECRET"
     rds-postgresql-instance-output:
       DATABASE_ENDPOINT: "rds_instance_endpoint"
       DATABASE_NAME: "database_name"
