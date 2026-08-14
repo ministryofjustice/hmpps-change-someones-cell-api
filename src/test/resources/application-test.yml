@@ -13,3 +13,14 @@ springdoc:
     enabled: true
   swagger-ui:
     enabled: true
+
+# Used when a Postgres is already listening on 5432 (e.g. docker compose up). When there is not,
+# TestBase starts a container and overrides these with its details.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/change_someones_cell?sslmode=prefer
+    username: change_someones_cell
+    password: change_someones_cell
+    hikari:
+      pool-name: CSC-API-DB-CP
+      maximum-pool-size: 10

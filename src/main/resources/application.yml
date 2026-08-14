@@ -28,6 +28,27 @@ spring:
     error:
       include-message: always
 
+  jpa:
+    open-in-view: false
+    show-sql: false
+    generate-ddl: false
+    hibernate:
+      ddl-auto: none
+
+  flyway:
+    enabled: true
+
+  datasource:
+    url: 'jdbc:postgresql://${DATABASE_ENDPOINT}/${DATABASE_NAME}?sslmode=verify-full'
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+    hikari:
+      pool-name: CSC-API-DB-CP
+      maximum-pool-size: 20
+      max-lifetime: 600000
+      connection-timeout: 1000
+      validation-timeout: 500
+
 server:
   port: 8080
   servlet:
