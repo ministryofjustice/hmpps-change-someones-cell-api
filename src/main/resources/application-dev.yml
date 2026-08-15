@@ -7,6 +7,9 @@ prison-api:
 case-notes-api:
   url: "http://localhost:8092"
 
+prisoner-search:
+  url: "http://localhost:8093"
+
 system:
   client:
     id: ${SYSTEM_CLIENT_ID:hmpps-change-someones-cell-api-client}
