@@ -14,4 +14,5 @@ enum class ErrorCode(val errorCode: Int) {
   DuplicateCellMovement(103),
   CellNotAvailable(104),
   PrisonerRecordLocked(105),
+  CellSwapUnavailable(106),
 }
