@@ -19,4 +19,17 @@ interface CellMovementRepository : JpaRepository<CellMovementEntity, UUID> {
     toLocationKey: String,
     occurredAt: LocalDateTime,
   ): Boolean
+
+  /**
+   * Backs the "what happened" read, which arrives keyed the way NOMIS keys a bed assignment.
+   *
+   * Returns the most recent match rather than requiring uniqueness. The pair is not unique here:
+   * a move that failed leaves a PENDING row behind, and a later attempt that succeeded records the
+   * same booking and, once NOMIS assigns it, can carry the same sequence. The completed one is the
+   * one that describes what happened, and it is the later of the two.
+   */
+  fun findFirstByBookingIdAndBedAssignmentSequenceOrderByOccurredAtDesc(
+    bookingId: Long,
+    bedAssignmentSequence: Int,
+  ): CellMovementEntity?
 }

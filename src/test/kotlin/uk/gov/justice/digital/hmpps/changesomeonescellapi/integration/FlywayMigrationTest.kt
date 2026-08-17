@@ -22,6 +22,6 @@ class FlywayMigrationTest : IntegrationTestBase() {
       String::class.java,
     )
 
-    assertThat(applied).contains("1", "2")
+    assertThat(applied).contains("1", "2", "3", "4")
   }
 }
