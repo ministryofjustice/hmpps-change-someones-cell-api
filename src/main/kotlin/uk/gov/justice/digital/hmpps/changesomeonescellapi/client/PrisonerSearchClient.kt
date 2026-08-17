@@ -54,4 +54,15 @@ data class PrisonerSearchPrisoner(
 
   /** The LIP/NOMIS location key for the cell they are currently in, or null if it cannot be built. */
   fun locationKey(): String? = if (prisonId != null && cellLocation != null) "$prisonId-$cellLocation" else null
+
+  /**
+   * The key of this prison's cell swap location. CSWAP is a real location in NOMIS and LIP, one per
+   * prison, keyed the same way as any other. Null only when the prisoner is not in a prison, which
+   * [isInPrison] already rules out before a swap.
+   */
+  fun cellSwapLocationKey(): String? = prisonId?.let { "$it-$CELL_SWAP_LOCATION_CODE" }
+
+  private companion object {
+    const val CELL_SWAP_LOCATION_CODE = "CSWAP"
+  }
 }

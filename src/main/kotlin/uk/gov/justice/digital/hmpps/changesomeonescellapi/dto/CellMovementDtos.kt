@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementStatus
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementType
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -44,10 +45,25 @@ data class CellMovementRequest(
   val commentText: String,
 )
 
+@Schema(
+  description = "A request to move a prisoner out of their cell to the prison's cell swap location, " +
+    "freeing the cell. Takes nothing but the prisoner: the destination is the prison's own C-SWAP " +
+    "location, and this journey records no reason or explanation.",
+)
+data class CellSwapRequest(
+  @get:Schema(description = "The prisoner number", example = "A1234BC", requiredMode = Schema.RequiredMode.REQUIRED)
+  @get:NotBlank(message = "prisonerNumber must not be blank")
+  @get:Pattern(regexp = "^[A-Z][0-9]{4}[A-Z]{2}$", message = "prisonerNumber must be in the format A1234BC")
+  val prisonerNumber: String,
+)
+
 @Schema(description = "A recorded cell movement")
 data class CellMovement(
   @get:Schema(description = "Our id for this movement")
   val id: UUID,
+
+  @get:Schema(description = "Whether this was a move into a cell or a swap out of one")
+  val movementType: CellMovementType,
 
   @get:Schema(description = "The prisoner number", example = "A1234BC")
   val prisonerNumber: String,

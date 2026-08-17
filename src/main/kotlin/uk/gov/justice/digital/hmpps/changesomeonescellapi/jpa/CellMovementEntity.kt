@@ -45,7 +45,9 @@ class CellMovementEntity(
 
   var reasonCode: String,
 
-  var commentText: String,
+  // Null for a cell swap: that journey never asks for an explanation, so there is none to record.
+  // A cell move always has one, enforced by @NotBlank on the request rather than by the column.
+  var commentText: String? = null,
 
   // The case notes service is UUID canonical. The legacy numeric id is only for migrated rows.
   var caseNoteUuid: UUID? = null,
@@ -57,6 +59,18 @@ class CellMovementEntity(
 
   @Enumerated(EnumType.STRING)
   var status: CellMovementStatus = CellMovementStatus.PENDING,
+
+  /**
+   * Which journey this was. Records intent, where [toLocationKey] records the outcome — the two
+   * decouple once prison-api's dedicated swap endpoint goes and a swap becomes an ordinary move to
+   * a CSWAP location.
+   *
+   * On a [CellMovementStatus.COMPLETED] row, [caseNoteUuid] is null if and only if this is
+   * [CellMovementType.CELL_SWAP]; a swap is never [CellMovementStatus.CASE_NOTE_FAILED], because no
+   * case note is attempted.
+   */
+  @Enumerated(EnumType.STRING)
+  var movementType: CellMovementType = CellMovementType.CELL_MOVE,
 ) {
   override fun equals(other: Any?): Boolean {
     if (this === other) return true

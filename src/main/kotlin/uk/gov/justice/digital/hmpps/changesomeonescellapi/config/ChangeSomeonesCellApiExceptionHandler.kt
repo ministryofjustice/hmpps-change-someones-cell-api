@@ -102,6 +102,18 @@ class ChangeSomeonesCellApiExceptionHandler {
       ),
     ).also { log.info("Cell not available: {}", e.message) }
 
+  @ExceptionHandler(CellSwapUnavailableException::class)
+  fun handleCellSwapUnavailableException(e: CellSwapUnavailableException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(BAD_REQUEST)
+    .body(
+      ErrorResponse(
+        status = BAD_REQUEST,
+        errorCode = ErrorCode.CellSwapUnavailable.name,
+        userMessage = "Validation failure: ${e.message}",
+        developerMessage = e.message,
+      ),
+    ).also { log.error("Cell swap unavailable - check the prison's CSWAP location: {}", e.message) }
+
   @ExceptionHandler(PrisonerRecordLockedException::class)
   fun handlePrisonerRecordLockedException(e: PrisonerRecordLockedException): ResponseEntity<ErrorResponse> = ResponseEntity
     .status(LOCKED)
@@ -164,6 +176,14 @@ class DuplicateCellMovementException(prisonerNumber: String, locationKey: String
  * combined message, so we pass its message through rather than guessing which it was.
  */
 class CellNotAvailableException(message: String?) : Exception(message ?: "The cell is not available")
+
+/**
+ * prison-api could not perform a cell swap: the prison has no CSWAP location configured, or more
+ * than one. Deliberately not a [CellNotAvailableException] — there is no destination cell to
+ * reject and no capacity involved, and telling the user to pick a different cell would be
+ * nonsense. This is an estate configuration fault, so it is logged at error level.
+ */
+class CellSwapUnavailableException(message: String?) : Exception(message ?: "No cell swap location is available at this prison")
 
 /** prison-api could not lock the booking row - someone has the prisoner open in P-NOMIS. */
 class PrisonerRecordLockedException : Exception("Resource locked, possibly in use in P-Nomis.")

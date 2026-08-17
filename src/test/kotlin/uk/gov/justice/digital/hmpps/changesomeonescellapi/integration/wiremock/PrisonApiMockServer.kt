@@ -85,6 +85,47 @@ class PrisonApiMockServer : WireMockServer(WIREMOCK_PORT) {
     )
   }
 
+  /**
+   * The cell swap. Note prison-api resolves the CSWAP location itself from the booking's agency, so
+   * the request carries no location - only the booking in the path.
+   */
+  fun stubMoveToCellSwap(
+    bookingId: Long,
+    assignedLivingUnitDesc: String = "MDI-CSWAP",
+    bedAssignmentHistorySequence: Int? = 3,
+  ) {
+    stubFor(
+      put(urlPathEqualTo("/api/bookings/$bookingId/move-to-cell-swap")).willReturn(
+        aResponse()
+          .withHeader("Content-Type", "application/json")
+          .withBody(
+            """
+              {
+                "bookingId": $bookingId,
+                "agencyId": "MDI",
+                "assignedLivingUnitId": 99999,
+                "assignedLivingUnitDesc": "$assignedLivingUnitDesc",
+                "bedAssignmentHistorySequence": $bedAssignmentHistorySequence
+              }
+            """.trimIndent(),
+          )
+          .withStatus(200),
+      ),
+    )
+  }
+
+  /** e.g. 404 when the prison has no CSWAP location configured. */
+  fun stubMoveToCellSwapFails(bookingId: Long, status: Int, body: String = """{"status":$status}""") {
+    stubFor(
+      put(urlPathEqualTo("/api/bookings/$bookingId/move-to-cell-swap")).willReturn(
+        aResponse()
+          .withHeader("Content-Type", "application/json")
+          .withBody(body)
+          .withStatus(status),
+      ),
+    )
+  }
+
   /** Any authenticated GET, used to make the client fetch a token so the token request can be asserted. */
   fun stubAnyGet(path: String) {
     stubFor(
