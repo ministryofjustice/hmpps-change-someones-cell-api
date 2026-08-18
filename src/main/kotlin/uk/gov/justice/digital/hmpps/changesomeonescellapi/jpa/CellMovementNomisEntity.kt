@@ -7,17 +7,21 @@ import jakarta.persistence.IdClass
 import jakarta.persistence.Table
 import org.hibernate.Hibernate
 import java.io.Serializable
+import java.time.LocalDateTime
+import java.util.UUID
 
 /**
- * A cell move reason migrated from whereabouts-api's CELL_MOVE_REASON table.
+ * A cell move reason inherited from whereabouts-api's CELL_MOVE_REASON table, plus what this
+ * service has since resolved about it.
  *
- * Deliberately holds only what the source held. Everything a [CellMovementEntity] carries beyond
- * these three columns - prisoner number, reason code, the explanation, who moved them and when -
- * whereabouts never recorded, so there is nothing honest to put in those fields. The explanation
- * lives only in the case note that [caseNoteLegacyId] points at.
+ * The first three fields are the link exactly as whereabouts held it, written by the one-off
+ * backfill or by the read-through that fetches a movement from whereabouts the first time someone
+ * asks. The rest is enrichment resolved from the case note the link points at - the only place the
+ * prisoner number, reason code, explanation and timestamp survive, because the source table held
+ * none of them. Resolved once and kept, so a migrated movement stops costing two downstream calls
+ * on every read, and so the row becomes addressable by prisoner number like a native one.
  *
- * Read only in normal operation: written once by the one-off migration, and never again by this
- * service. New movements go in [CellMovementEntity].
+ * New movements go in [CellMovementEntity]; nothing here is ever a movement this service made.
  */
 @Entity
 @Table(name = "cell_movement_nomis")
@@ -39,6 +43,25 @@ class CellMovementNomisEntity(
    */
   @Column(name = "case_note_legacy_id", nullable = false)
   val caseNoteLegacyId: Long,
+
+  var prisonerNumber: String? = null,
+
+  /** The CHG_HOUS_RSN code, from the case note's subType. */
+  var reasonCode: String? = null,
+
+  var commentText: String? = null,
+
+  var caseNoteUuid: UUID? = null,
+
+  /** The case note's occurrenceDateTime, which whereabouts set to the moment of the move. */
+  var occurredAt: LocalDateTime? = null,
+
+  /**
+   * When the enrichment was resolved. Null means not yet attempted, or the last attempt failed
+   * transiently and should be retried. Set alongside null note fields means the case note is
+   * definitively gone and there is nothing left to fetch.
+   */
+  var enrichedAt: LocalDateTime? = null,
 ) {
   override fun equals(other: Any?): Boolean {
     if (this === other) return true

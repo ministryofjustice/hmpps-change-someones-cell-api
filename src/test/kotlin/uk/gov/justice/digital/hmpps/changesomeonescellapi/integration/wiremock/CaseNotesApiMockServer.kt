@@ -95,8 +95,8 @@ class CaseNotesApiMockServer : WireMockServer(WIREMOCK_PORT) {
                 "subType": "$subType",
                 "text": "$text",
                 "authorName": "Jane Smith",
-                "createdAt": "2026-08-01T10:00:00",
-                "occurredAt": "2026-08-01T09:55:00"
+                "creationDateTime": "2026-08-01T10:00:00",
+                "occurrenceDateTime": "2026-08-01T09:55:00"
               }
             """.trimIndent(),
           )

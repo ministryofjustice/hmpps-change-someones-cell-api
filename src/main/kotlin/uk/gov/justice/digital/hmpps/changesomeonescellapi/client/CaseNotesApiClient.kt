@@ -1,6 +1,7 @@
 package uk.gov.justice.digital.hmpps.changesomeonescellapi.client
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.annotation.JsonProperty
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
@@ -97,4 +98,11 @@ data class CaseNote(
   val subType: String? = null,
   /** The explanation of the move, in the mover's own words. Absent from a create response. */
   val text: String? = null,
+  /**
+   * When the move happened. whereabouts set this to the moment of the move when it created the
+   * note, making it the only surviving timestamp for a migrated movement - CELL_MOVE_REASON held
+   * no dates at all.
+   */
+  @param:JsonProperty("occurrenceDateTime")
+  val occurredAt: LocalDateTime? = null,
 )

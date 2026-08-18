@@ -161,11 +161,16 @@ class CellMovementResource(
       "Replaces the two hops this needed before: whereabouts-api for a case note id, then " +
       "offender-case-notes for its text. For a movement this service recorded the explanation is held " +
       "here, so it is answered in one call with nothing downstream. " +
-      "Movements migrated from whereabouts carry only a case note reference, so their explanation and " +
-      "reason code are resolved from that case note and are null if it cannot be read - see the " +
-      "individual field descriptions. Check `source` rather than inferring from which fields are null. " +
+      "Movements migrated from whereabouts carry only a case note reference, so their explanation, " +
+      "reason code and timestamp are resolved from that case note - once, on first read, and kept. " +
+      "A movement not yet migrated at all is fetched from whereabouts on first read and migrated as it " +
+      "is served, which is what lets consumers switch to this endpoint before the one-off backfill has " +
+      "run, with no outage and no data left behind. Fields that cannot be resolved are null - check " +
+      "`source` rather than inferring from which fields are null. " +
       "Keyed by booking id because that is how NOMIS keys a bed assignment and how the migrated data " +
-      "was keyed; it is not a booking id this service would otherwise accept. " +
+      "was keyed - it is not a booking id this service would otherwise accept, and this is the one " +
+      "endpoint that accepts one. It is transitional: once consumers render history from this " +
+      "service's own records, this lookup retires with it. " +
       "Requires role ROLE_CELL_MOVEMENTS__RO",
     responses = [
       ApiResponse(
