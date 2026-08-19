@@ -53,7 +53,13 @@ spring:
     password: ${DATABASE_PASSWORD}
     hikari:
       pool-name: CSC-API-DB-CP
-      maximum-pool-size: 20
+      # Sized against the db.t4g.micro RDS, which Postgres caps at ~85 connections. A rolling
+      # deploy runs old and new replicas side by side, so the worst case is (2 x replicas) pods
+      # holding minimum-idle each and briefly bursting; 20/pod with min-idle defaulting to max
+      # exhausted the instance in prod (4 replicas) and every rollout crashlooped on
+      # "remaining connection slots are reserved".
+      maximum-pool-size: 10
+      minimum-idle: 2
       max-lifetime: 600000
       connection-timeout: 1000
       validation-timeout: 500
