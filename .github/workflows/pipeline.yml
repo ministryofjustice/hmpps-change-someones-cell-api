@@ -107,4 +107,7 @@ jobs:
     with:
       environment: 'prod'
       app_version: '${{ needs.build.outputs.app_version }}'
+      # Prod runs 4 replicas and the rollout has twice overrun the 5m default while old pods were
+      # still terminating ("Pending termination: 4"), triggering an unnecessary rollback.
+      helm_timeout: '10m'
       slack_notification: 'false' # if 'true', it needs a valid PROD_RELEASES_SLACK_CHANNEL variable to be set
