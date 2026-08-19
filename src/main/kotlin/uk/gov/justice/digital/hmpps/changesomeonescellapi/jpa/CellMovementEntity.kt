@@ -43,6 +43,12 @@ class CellMovementEntity(
 
   var toLocationKey: String,
 
+  // The locations-inside-prison UUIDs for the two keys, resolved at the time of the move. Keys are
+  // mutable (codes and hierarchy get renamed); the UUID is the location's fixed identity, so it is
+  // what history joins on. Nullable: resolution is best effort and never blocks the move.
+  var fromLocationId: UUID? = null,
+  var toLocationId: UUID? = null,
+
   var reasonCode: String,
 
   // Null for a cell swap: that journey never asks for an explanation, so there is none to record.

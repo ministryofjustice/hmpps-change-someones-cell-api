@@ -13,6 +13,9 @@ prisoner-search:
 whereabouts-api:
   url: "http://localhost:8094"
 
+locations-inside-prison-api:
+  url: "http://localhost:8095"
+
 system:
   client:
     id: ${SYSTEM_CLIENT_ID:hmpps-change-someones-cell-api-client}

@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.SYSTEM_USERNAME
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.client.CaseNotesApiClient
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.client.CellMoveResult
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.client.LocationsInsidePrisonApiClient
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.client.PrisonApiClient
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.client.PrisonerSearchClient
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.client.PrisonerSearchPrisoner
@@ -41,6 +42,7 @@ class CellMovementService(
   private val prisonerSearchClient: PrisonerSearchClient,
   private val prisonApiClient: PrisonApiClient,
   private val caseNotesApiClient: CaseNotesApiClient,
+  private val locationsInsidePrisonApiClient: LocationsInsidePrisonApiClient,
   private val authenticationHolder: HmppsAuthenticationHolder,
   private val clock: Clock,
 ) {
@@ -105,9 +107,11 @@ class CellMovementService(
     }
 
     // We derived the destination; prison-api resolved it for real. Prefer its answer, which covers
-    // a prison whose CSWAP location is not described the way we assumed.
-    result.assignedLivingUnitDesc?.let {
-      movement.toLocationKey = it
+    // a prison whose CSWAP location is not described the way we assumed - and re-resolve the UUID
+    // so it matches the key actually stored.
+    result.assignedLivingUnitDesc?.takeIf { it != movement.toLocationKey }?.let { actualKey ->
+      movement.toLocationKey = actualKey
+      movement.toLocationId = locationsInsidePrisonApiClient.resolveKeys(setOf(actualKey))[actualKey]
       cellMovementRepository.saveAndFlush(movement)
     }
 
@@ -137,11 +141,20 @@ class CellMovementService(
   ): CellMovementEntity {
     rejectDuplicate(prisoner.prisonerNumber, toLocationKey, occurredAt)
 
+    // The keys are mutable - codes and hierarchy get renamed in locations-inside-prison - so the
+    // UUIDs are the durable identity of the two locations, resolved at the moment of the move. One
+    // bulk call covers both. Best effort: an unresolved key stores a null UUID and the move goes
+    // ahead regardless.
+    val fromLocationKey = prisoner.locationKey()
+    val locationIds = locationsInsidePrisonApiClient.resolveKeys(setOfNotNull(fromLocationKey, toLocationKey))
+
     return cellMovementRepository.saveAndFlush(
       CellMovementEntity(
         prisonerNumber = prisoner.prisonerNumber,
         bookingId = prisoner.bookingId!!.toLong(),
-        fromLocationKey = prisoner.locationKey(),
+        fromLocationKey = fromLocationKey,
+        fromLocationId = fromLocationKey?.let { locationIds[it] },
+        toLocationId = locationIds[toLocationKey],
         toLocationKey = toLocationKey,
         reasonCode = reasonCode,
         commentText = commentText,
@@ -211,7 +224,9 @@ class CellMovementService(
     movementType = movementType,
     prisonerNumber = prisonerNumber,
     fromLocationKey = fromLocationKey,
+    fromLocationId = fromLocationId,
     toLocationKey = toLocationKey,
+    toLocationId = toLocationId,
     reasonCode = reasonCode,
     occurredAt = occurredAt,
     recordedBy = recordedBy,

@@ -133,6 +133,10 @@ class CellMovementReasonService(
     // Not null: this row was found by matching on it.
     bedAssignmentSequence = bedAssignmentSequence!!,
     source = CellMovementSource.CELL_MOVEMENTS,
+    toLocationKey = toLocationKey,
+    toLocationId = toLocationId,
+    fromLocationKey = fromLocationKey,
+    fromLocationId = fromLocationId,
     prisonerNumber = prisonerNumber,
     reasonCode = reasonCode,
     commentText = commentText,

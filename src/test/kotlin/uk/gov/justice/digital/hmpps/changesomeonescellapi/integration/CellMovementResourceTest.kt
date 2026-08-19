@@ -12,6 +12,8 @@ import org.springframework.web.reactive.function.BodyInserters
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.CaseNotesApiExtension.Companion.caseNotesApi
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.CaseNotesApiMockServer
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.HmppsAuthApiExtension.Companion.hmppsAuth
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.LocationsInsidePrisonExtension.Companion.locationsInsidePrison
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.LocationsInsidePrisonMockServer
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.PrisonApiExtension.Companion.prisonApi
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.PrisonerSearchExtension.Companion.prisonerSearch
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementStatus
@@ -31,6 +33,10 @@ class CellMovementResourceTest : IntegrationTestBase() {
     prisonerSearch.stubGetPrisoner(PRISONER_NUMBER, bookingId = BOOKING_ID.toString(), cellLocation = FROM_CELL)
     prisonApi.stubMoveToCell(BOOKING_ID, TO_LOCATION_KEY)
     caseNotesApi.stubCreateCaseNote(PRISONER_NUMBER)
+    locationsInsidePrison.stubResolveKeys(
+      "MDI-$FROM_CELL" to LocationsInsidePrisonMockServer.FROM_LOCATION_ID,
+      TO_LOCATION_KEY to LocationsInsidePrisonMockServer.TO_LOCATION_ID,
+    )
   }
 
   @Test
@@ -66,6 +72,8 @@ class CellMovementResourceTest : IntegrationTestBase() {
       .jsonPath("$.prisonerNumber").isEqualTo(PRISONER_NUMBER)
       .jsonPath("$.toLocationKey").isEqualTo(TO_LOCATION_KEY)
       .jsonPath("$.fromLocationKey").isEqualTo("MDI-$FROM_CELL")
+      .jsonPath("$.fromLocationId").isEqualTo(LocationsInsidePrisonMockServer.FROM_LOCATION_ID)
+      .jsonPath("$.toLocationId").isEqualTo(LocationsInsidePrisonMockServer.TO_LOCATION_ID)
       .jsonPath("$.status").isEqualTo("COMPLETED")
       .jsonPath("$.caseNoteUuid").isEqualTo(CaseNotesApiMockServer.CASE_NOTE_UUID)
       .jsonPath("$.recordedBy").isEqualTo(USER)
@@ -203,6 +211,48 @@ class CellMovementResourceTest : IntegrationTestBase() {
       .body(BodyInserters.fromValue(requestBody(comment = "")))
       .exchange()
       .expectStatus().isBadRequest
+  }
+
+  @Test
+  fun `resolves both location UUIDs in one call`() {
+    postMove().expectStatus().isCreated
+
+    // Keys are mutable - the UUID is the location's fixed identity - and both must come from a
+    // single bulk request, not one per key.
+    val requests = locationsInsidePrison.findAll(
+      com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor(urlPathEqualTo("/locations/keys")),
+    )
+    org.assertj.core.api.Assertions.assertThat(requests).hasSize(1)
+    org.assertj.core.api.Assertions.assertThat(requests.single().bodyAsString)
+      .contains("MDI-$FROM_CELL")
+      .contains(TO_LOCATION_KEY)
+  }
+
+  @Test
+  fun `locations-inside-prison being down does not block the move`() {
+    locationsInsidePrison.stubResolveKeysFails()
+
+    postMove().expectStatus().isCreated
+
+    // The NOMIS move is the business-critical operation; recording a UUID is ancillary and the
+    // nulls are backfillable. Same stance as a failed case note.
+    val movement = cellMovementRepository.findAll().single()
+    org.assertj.core.api.Assertions.assertThat(movement.status).isEqualTo(CellMovementStatus.COMPLETED)
+    org.assertj.core.api.Assertions.assertThat(movement.fromLocationId).isNull()
+    org.assertj.core.api.Assertions.assertThat(movement.toLocationId).isNull()
+  }
+
+  @Test
+  fun `a key locations-inside-prison does not recognise nulls only that UUID`() {
+    // LIP silently omits unrecognised keys from the bulk response rather than erroring.
+    locationsInsidePrison.stubResolveKeys(TO_LOCATION_KEY to LocationsInsidePrisonMockServer.TO_LOCATION_ID)
+
+    postMove().expectStatus().isCreated
+
+    val movement = cellMovementRepository.findAll().single()
+    org.assertj.core.api.Assertions.assertThat(movement.fromLocationId).isNull()
+    org.assertj.core.api.Assertions.assertThat(movement.toLocationId)
+      .isEqualTo(java.util.UUID.fromString(LocationsInsidePrisonMockServer.TO_LOCATION_ID))
   }
 
   private fun postMove() = webTestClient.post().uri("/cell-movements")

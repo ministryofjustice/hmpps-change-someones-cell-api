@@ -13,6 +13,8 @@ import org.springframework.http.MediaType
 import org.springframework.web.reactive.function.BodyInserters
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.CaseNotesApiExtension.Companion.caseNotesApi
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.HmppsAuthApiExtension.Companion.hmppsAuth
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.LocationsInsidePrisonExtension.Companion.locationsInsidePrison
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.LocationsInsidePrisonMockServer
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.PrisonApiExtension.Companion.prisonApi
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.PrisonerSearchExtension.Companion.prisonerSearch
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementStatus
@@ -32,6 +34,10 @@ class CellSwapResourceTest : IntegrationTestBase() {
     hmppsAuth.stubGrantToken()
     prisonerSearch.stubGetPrisoner(PRISONER_NUMBER, bookingId = BOOKING_ID.toString(), cellLocation = FROM_CELL)
     prisonApi.stubMoveToCellSwap(BOOKING_ID)
+    locationsInsidePrison.stubResolveKeys(
+      "MDI-$FROM_CELL" to LocationsInsidePrisonMockServer.FROM_LOCATION_ID,
+      "MDI-CSWAP" to CSWAP_LOCATION_ID,
+    )
   }
 
   @Test
@@ -62,6 +68,7 @@ class CellSwapResourceTest : IntegrationTestBase() {
       .jsonPath("$.movementType").isEqualTo("CELL_SWAP")
       .jsonPath("$.fromLocationKey").isEqualTo("MDI-$FROM_CELL")
       .jsonPath("$.toLocationKey").isEqualTo("MDI-CSWAP")
+      .jsonPath("$.toLocationId").isEqualTo(CSWAP_LOCATION_ID)
       .jsonPath("$.reasonCode").isEqualTo("ADM")
       .jsonPath("$.status").isEqualTo("COMPLETED")
       .jsonPath("$.caseNoteUuid").doesNotExist()
@@ -208,6 +215,24 @@ class CellSwapResourceTest : IntegrationTestBase() {
       .expectStatus().isBadRequest
   }
 
+  @Test
+  fun `re-resolves the UUID when prison-api returns a different location than derived`() {
+    prisonApi.stubMoveToCellSwap(BOOKING_ID, assignedLivingUnitDesc = "MDI-CSWAP-2")
+    locationsInsidePrison.stubResolveKeys(
+      "MDI-CSWAP" to CSWAP_LOCATION_ID,
+      "MDI-CSWAP-2" to ACTUAL_CSWAP_LOCATION_ID,
+    )
+
+    postSwap().expectStatus().isCreated
+
+    // The stored UUID must identify the location actually stored in the key, not the one we
+    // guessed before the call.
+    val movement = cellMovementRepository.findAll().single()
+    org.assertj.core.api.Assertions.assertThat(movement.toLocationKey).isEqualTo("MDI-CSWAP-2")
+    org.assertj.core.api.Assertions.assertThat(movement.toLocationId)
+      .isEqualTo(java.util.UUID.fromString(ACTUAL_CSWAP_LOCATION_ID))
+  }
+
   private fun postSwap() = webTestClient.post().uri(URI)
     .headers(setAuthorisation(username = USER, roles = writeRole))
     .contentType(MediaType.APPLICATION_JSON)
@@ -222,5 +247,7 @@ class CellSwapResourceTest : IntegrationTestBase() {
     const val BOOKING_ID = 1200866L
     const val FROM_CELL = "1-1-001"
     const val USER = "TEST_USER"
+    const val CSWAP_LOCATION_ID = "7c1e2f3a-1111-4d4d-8888-aaaaaaaaaaaa"
+    const val ACTUAL_CSWAP_LOCATION_ID = "7c1e2f3a-2222-4d4d-8888-bbbbbbbbbbbb"
   }
 }
