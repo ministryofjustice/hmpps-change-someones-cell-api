@@ -133,6 +133,34 @@ class PrisonerSearchMockServer : WireMockServer(WIREMOCK_PORT) {
   }
 
   /**
+   * The batched form the backfill uses: whatever booking ids are asked for, only [prisoners]
+   * (bookingId to prisonerNumber) come back - bookings the index no longer knows are simply
+   * absent, as in the real service.
+   */
+  fun stubGetPrisonersByBookingIds(vararg prisoners: Pair<Long, String>) {
+    val body = prisoners.joinToString(",\n") { (bookingId, prisonerNumber) ->
+      """
+        {
+          "prisonerNumber": "$prisonerNumber",
+          "bookingId": "$bookingId",
+          "prisonId": "MDI",
+          "cellLocation": "1-1-001",
+          "inOutStatus": "IN",
+          "status": "ACTIVE IN"
+        }
+      """.trimIndent()
+    }
+    stubFor(
+      post(urlPathEqualTo("/prisoner-search/booking-ids")).willReturn(
+        aResponse()
+          .withHeader("Content-Type", "application/json")
+          .withBody("[$body]")
+          .withStatus(200),
+      ),
+    )
+  }
+
+  /**
    * No match. What prisoner-search returns for a booking that is no longer the prisoner's current
    * one - anyone released and recalled since the move - which is an empty list, not a 404.
    */

@@ -105,3 +105,46 @@ docker build --build-arg GIT_REF=21345 --build-arg GIT_BRANCH=bob --build-arg BU
 ```
 docker run -e HMPPS_AUTH_URL="https://sign-in-dev.hmpps.service.justice.gov.uk/auth" <sha from step 3>
 ```
+
+## One-off backfill of whereabouts CELL_MOVE_REASON (MAPA-304)
+
+The `/migration/cell-move-reasons/*` endpoints drain whereabouts-api's `CELL_MOVE_REASON` table
+into `cell_movement_nomis`, fully enriched. They are operator-driven and chunked: each call does a
+bounded amount of work and returns a cursor, and the loop below - with its `sleep` - is both the
+scheduler and the rate limit on case-notes. Everything is idempotent, so a timed-out call, a
+crash, or a repeat costs nothing; re-run from the last cursor (or from the start - inserts skip
+existing rows and never overwrite enrichment).
+
+Run the final sweep only once the UI's writes have moved to this API (MAPA-280) and the source
+table is frozen; rows whereabouts gains mid-run below the cursor would otherwise be missed
+(live moves self-migrate through the read path, so this only matters for the very last sweep).
+
+Prerequisites: a client-credentials token with `ROLE_CELL_MOVEMENTS__SYNC__RW`, and - for the
+enrich pass - `ROLE_VIEW_PRISONER_DATA` on this service's own client for the prison-api
+historic-booking fallback.
+
+```bash
+API=https://change-someones-cell-api-dev.hmpps.service.justice.gov.uk
+TOKEN=... # client credentials grant
+
+# Pass 1: copy the links
+CURSOR="lastBookingId=0&lastBedAssignmentSequence=0"
+while :; do
+  R=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" "$API/migration/cell-move-reasons/link-sweep?$CURSOR")
+  echo "$R"
+  [ "$(jq -r .complete <<<"$R")" = true ] && break
+  CURSOR="lastBookingId=$(jq -r .nextCursor.lastBookingId <<<"$R")&lastBedAssignmentSequence=$(jq -r .nextCursor.lastBedAssignmentSequence <<<"$R")"
+  sleep 1
+done
+
+# Pass 2: enrich (same loop shape against /enrich, default batchSize=50)
+
+# Then reconcile
+curl -s -H "Authorization: Bearer $TOKEN" "$API/migration/cell-move-reasons/status" | jq .
+```
+
+Reconciliation: `totalRows` must equal whereabouts' `select count(*) from cell_move_reason`
+(ask Activities & Appointments to run it). A second link sweep from `0/0` reporting
+`rowsInserted: 0` proves nothing appeared mid-run. Record `sampleUnresolvedBookingIds` - bookings
+neither prisoner-search nor prison-api can resolve - on the ticket: that is the "explicitly
+accounted for" list. These endpoints are deleted with the whereabouts decommission (MAPA-282).

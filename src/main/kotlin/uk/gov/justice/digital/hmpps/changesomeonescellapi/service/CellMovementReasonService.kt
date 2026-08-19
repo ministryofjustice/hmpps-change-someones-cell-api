@@ -2,8 +2,6 @@ package uk.gov.justice.digital.hmpps.changesomeonescellapi.service
 
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import uk.gov.justice.digital.hmpps.changesomeonescellapi.client.CaseNotesApiClient
-import uk.gov.justice.digital.hmpps.changesomeonescellapi.client.PrisonerSearchClient
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.client.WhereaboutsApiClient
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.config.CellMovementReasonNotFoundException
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.CellMovementReason
@@ -13,8 +11,6 @@ import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementNomisE
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementNomisId
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.repository.CellMovementNomisRepository
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.repository.CellMovementRepository
-import java.time.Clock
-import java.time.LocalDateTime
 import kotlin.jvm.optionals.getOrNull
 
 /**
@@ -42,10 +38,8 @@ import kotlin.jvm.optionals.getOrNull
 class CellMovementReasonService(
   private val cellMovementRepository: CellMovementRepository,
   private val cellMovementNomisRepository: CellMovementNomisRepository,
-  private val prisonerSearchClient: PrisonerSearchClient,
-  private val caseNotesApiClient: CaseNotesApiClient,
+  private val enricher: CellMovementNomisEnricher,
   private val whereaboutsApiClient: WhereaboutsApiClient,
-  private val clock: Clock,
 ) {
 
   fun findByBedAssignment(bookingId: Long, bedAssignmentSequence: Int): CellMovementReason {
@@ -56,7 +50,7 @@ class CellMovementReasonService(
     cellMovementNomisRepository
       .findById(CellMovementNomisId(bookingId, bedAssignmentSequence))
       .getOrNull()
-      ?.let { return enrichIfNeeded(it).toReason() }
+      ?.let { return enricher.enrichIfNeeded(it).toReason() }
 
     return readThroughFromWhereabouts(bookingId, bedAssignmentSequence)?.toReason()
       ?: throw CellMovementReasonNotFoundException(bookingId, bedAssignmentSequence)
@@ -82,49 +76,7 @@ class CellMovementReasonService(
         caseNoteLegacyId = link.caseNoteId,
       ),
     )
-    return enrichIfNeeded(row)
-  }
-
-  /**
-   * Resolves what the case note holds - prisoner number, reason code, explanation, timestamp -
-   * onto the row, once. [CellMovementNomisEntity.enrichedAt] set means done (even with null note
-   * fields, which records that the case note is definitively gone); null means try again next read.
-   *
-   * Two outcomes deliberately do not set it:
-   *  - the prisoner number could not be resolved - prisoner-search only answers for a prisoner's
-   *    current booking, so an old booking needs the backfill's one-off prison-api lookup instead;
-   *  - the case-notes call failed transiently, where retrying on a later read costs nothing.
-   */
-  private fun enrichIfNeeded(row: CellMovementNomisEntity): CellMovementNomisEntity {
-    if (row.enrichedAt != null) return row
-
-    val prisonerNumber = row.prisonerNumber
-      ?: prisonerSearchClient.getPrisonerByBookingId(row.bookingId)?.prisonerNumber
-      ?: run {
-        log.info("No current prisoner for booking {} - leaving row for the backfill to enrich", row.bookingId)
-        return row
-      }
-    row.prisonerNumber = prisonerNumber
-
-    try {
-      caseNotesApiClient.getCaseNote(prisonerNumber, row.caseNoteLegacyId.toString())?.let { note ->
-        row.reasonCode = note.subType
-        row.commentText = note.text
-        row.caseNoteUuid = note.caseNoteId
-        row.occurredAt = note.occurredAt
-      } ?: log.info(
-        "Case note {} for {} no longer exists - recording the movement without its explanation",
-        row.caseNoteLegacyId,
-        prisonerNumber,
-      )
-      row.enrichedAt = LocalDateTime.now(clock)
-    } catch (e: Exception) {
-      // Transient: keep the prisoner number we did learn, leave enrichedAt null so the next read
-      // retries the note, and still serve what we have.
-      log.warn("Could not read case note {} for {}: {}", row.caseNoteLegacyId, prisonerNumber, e.message)
-    }
-
-    return cellMovementNomisRepository.saveAndFlush(row)
+    return enricher.enrichIfNeeded(row)
   }
 
   /** Everything is on the row. No downstream call, whatever the status of the movement. */
