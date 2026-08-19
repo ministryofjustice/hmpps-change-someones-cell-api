@@ -71,8 +71,20 @@ data class CellMovement(
   @get:Schema(description = "The cell they were in before the move, as best known", example = "MDI-1-1-001")
   val fromLocationKey: String?,
 
+  @get:Schema(
+    description = "The locations-inside-prison UUID for fromLocationKey - the location's fixed identity, " +
+      "stable when keys are renamed. Null if it could not be resolved at the time of the move.",
+  )
+  val fromLocationId: UUID?,
+
   @get:Schema(description = "The cell they were moved into", example = "MDI-1-1-015")
   val toLocationKey: String,
+
+  @get:Schema(
+    description = "The locations-inside-prison UUID for toLocationKey - the location's fixed identity, " +
+      "stable when keys are renamed. Null if it could not be resolved at the time of the move.",
+  )
+  val toLocationId: UUID?,
 
   @get:Schema(description = "The reason code for the move", example = "ADM")
   val reasonCode: String,
@@ -127,6 +139,16 @@ data class CellMovementReason(
 
   @get:Schema(description = "Which record this came from, and therefore how complete it is")
   val source: CellMovementSource,
+
+  @get:Schema(
+    description = "The locations-inside-prison UUIDs and keys for the movement's locations. Present only " +
+      "for movements this service recorded - whereabouts never held locations at all.",
+    example = "MDI-1-1-015",
+  )
+  val toLocationKey: String? = null,
+  val toLocationId: UUID? = null,
+  val fromLocationKey: String? = null,
+  val fromLocationId: UUID? = null,
 
   @get:Schema(
     description = "The prisoner moved. Always present for a movement this service recorded. For a " +

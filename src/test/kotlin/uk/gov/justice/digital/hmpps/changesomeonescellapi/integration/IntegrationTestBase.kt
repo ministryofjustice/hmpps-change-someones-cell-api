@@ -15,6 +15,8 @@ import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.C
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.CaseNotesApiExtension.Companion.caseNotesApi
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.HmppsAuthApiExtension
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.HmppsAuthApiExtension.Companion.hmppsAuth
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.LocationsInsidePrisonExtension
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.LocationsInsidePrisonExtension.Companion.locationsInsidePrison
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.PrisonApiExtension
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.PrisonApiExtension.Companion.prisonApi
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock.PrisonerSearchExtension
@@ -25,6 +27,7 @@ import java.time.Clock
 
 @ExtendWith(
   HmppsAuthApiExtension::class,
+  LocationsInsidePrisonExtension::class,
   PrisonApiExtension::class,
   CaseNotesApiExtension::class,
   PrisonerSearchExtension::class,
@@ -62,5 +65,6 @@ abstract class IntegrationTestBase : TestBase() {
     prisonApi.stubHealthPing(status)
     caseNotesApi.stubHealthPing(status)
     prisonerSearch.stubHealthPing(status)
+    locationsInsidePrison.stubHealthPing(status)
   }
 }

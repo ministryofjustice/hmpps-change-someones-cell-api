@@ -22,6 +22,7 @@ class WebClientConfiguration(
   @param:Value("\${case-notes-api.url}") val caseNotesApiBaseUri: String,
   @param:Value("\${prisoner-search.url}") val prisonerSearchBaseUri: String,
   @param:Value("\${whereabouts-api.url}") val whereaboutsApiBaseUri: String,
+  @param:Value("\${locations-inside-prison-api.url}") val locationsInsidePrisonApiBaseUri: String,
   @param:Value("\${api.health-timeout:2s}") val healthTimeout: Duration,
   @param:Value("\${api.timeout:20s}") val timeout: Duration,
 ) {
@@ -123,6 +124,24 @@ class WebClientConfiguration(
 
   @Bean
   fun prisonerSearchHealthWebClient(builder: WebClient.Builder): WebClient = builder.healthWebClient(prisonerSearchBaseUri, healthTimeout)
+
+  // locations-inside-prison resolves location keys to their UUIDs - the durable identity a key
+  // does not provide, since keys can be renamed. A permanent dependency, so unlike whereabouts it
+  // gets a health ping.
+  @Bean
+  @RequestScope(proxyMode = ScopedProxyMode.INTERFACES)
+  fun locationsInsidePrisonApiWebClient(
+    authorizedClientManager: OAuth2AuthorizedClientManager,
+    builder: WebClient.Builder,
+  ): WebClient = builder.authorisedWebClient(
+    authorizedClientManager,
+    registrationId = SYSTEM_USERNAME,
+    url = locationsInsidePrisonApiBaseUri,
+    timeout,
+  )
+
+  @Bean
+  fun locationsInsidePrisonApiHealthWebClient(builder: WebClient.Builder): WebClient = builder.healthWebClient(locationsInsidePrisonApiBaseUri, healthTimeout)
 
   // whereabouts-api backs the transitional read-through for movements not yet migrated. There is
   // deliberately NO health web client and no HealthPingCheck for it: whereabouts is being
