@@ -92,3 +92,86 @@ data class CellMovement(
   @get:Schema(description = "How far the movement got")
   val status: CellMovementStatus,
 )
+
+@Schema(description = "Where the record of a cell movement came from")
+enum class CellMovementSource {
+  /** Recorded by this service, from MAPA-278 onwards. Complete. */
+  CELL_MOVEMENTS,
+
+  /**
+   * Migrated from whereabouts-api's CELL_MOVE_REASON table. Carries only a case note reference;
+   * everything else is either resolved from that case note or absent.
+   */
+  MIGRATED_FROM_WHEREABOUTS,
+}
+
+/**
+ * Why a prisoner was moved into a particular cell, keyed the way NOMIS keys the bed assignment it
+ * relates to.
+ *
+ * Replaces the two hops consumers make today - whereabouts for the case note id, then case-notes
+ * for its text. For anything this service recorded, [commentText] is served from our own row with
+ * no downstream call at all.
+ *
+ * Several fields are nullable because migrated records genuinely do not have them, not because
+ * they are optional in general. [source] says which kind of record this is, and is the field to
+ * branch on rather than inferring from which values came back null.
+ */
+@Schema(description = "The reason a prisoner was moved into a cell, and the explanation given at the time")
+data class CellMovementReason(
+  @get:Schema(description = "The NOMIS booking the movement was recorded against", example = "1200866")
+  val bookingId: Long,
+
+  @get:Schema(description = "The NOMIS bed assignment this movement created", example = "3")
+  val bedAssignmentSequence: Int,
+
+  @get:Schema(description = "Which record this came from, and therefore how complete it is")
+  val source: CellMovementSource,
+
+  @get:Schema(
+    description = "The prisoner moved. Always present for a movement this service recorded. For a " +
+      "migrated one it is resolved from the booking, and is null if that booking is no longer the " +
+      "prisoner's current one.",
+    example = "A1234BC",
+  )
+  val prisonerNumber: String?,
+
+  @get:Schema(
+    description = "The reason for the move, a code from the CHG_HOUS_RSN reference domain. For a " +
+      "migrated movement this is recovered from the case note's subType, so it is null when the " +
+      "case note could not be read.",
+    example = "ADM",
+  )
+  val reasonCode: String?,
+
+  @get:Schema(
+    description = "What happened, in the mover's own words - the \"what happened\" text. Null for a " +
+      "cell swap, which never asks for an explanation, and for a migrated movement whose case note " +
+      "could not be read.",
+    example = "Moved following an altercation on the wing",
+  )
+  val commentText: String?,
+
+  @get:Schema(description = "The case note recording the explanation, where there is one")
+  val caseNoteUuid: UUID?,
+
+  @get:Schema(
+    description = "The deprecated numeric case note id. Present for a migrated movement, which is " +
+      "the only form whereabouts stored, so a caller can still fall back to reading the case note " +
+      "directly.",
+    example = "1234567",
+  )
+  val caseNoteLegacyId: Long?,
+
+  @get:Schema(description = "When the move was recorded. Not held for a migrated movement.")
+  val occurredAt: LocalDateTime?,
+
+  @get:Schema(description = "Who made the move. Not held for a migrated movement.", example = "AUTH_ADM")
+  val recordedBy: String?,
+
+  @get:Schema(
+    description = "Which journey this was. Null for a migrated movement: whereabouts recorded no " +
+      "cell swaps, but nothing in the data proves a given row was not one.",
+  )
+  val movementType: CellMovementType?,
+)

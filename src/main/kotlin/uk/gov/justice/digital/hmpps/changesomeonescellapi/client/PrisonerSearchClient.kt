@@ -32,6 +32,34 @@ class PrisonerSearchClient(
   } catch (e: WebClientResponseException) {
     if (e.statusCode == HttpStatus.NOT_FOUND) null else throw e
   }
+
+  /**
+   * The reverse lookup: which prisoner does this booking belong to?
+   *
+   * Needed only for movements migrated from whereabouts. CELL_MOVE_REASON was keyed by booking id
+   * and held no prisoner number, but case-notes will not serve a case note without one, so the
+   * number has to be recovered before the explanation can be read back.
+   *
+   * **This resolves current bookings only.** prisoner-search indexes a prisoner once, against the
+   * booking they are on now, so a migrated row for someone's earlier booking - anyone released and
+   * recalled since the move - will not match and this returns null. That is not worth a second data
+   * source to fix: the caller falls back to returning the movement without its explanation, and
+   * prison-api's booking endpoint, which does resolve historic bookings, would cost a role we do
+   * not hold and would still be a NOMIS read we are trying to move away from.
+   *
+   * Requires ROLE_PRISONER_SEARCH or ROLE_GLOBAL_SEARCH. Note that ROLE_PRISONER_SEARCH__PRISONER__RO
+   * is *not* accepted on this endpoint, though it is on `GET /prisoner/{prisonerNumber}`.
+   */
+  fun getPrisonerByBookingId(bookingId: Long): PrisonerSearchPrisoner? = webClient
+    .post()
+    .uri("/prisoner-search/booking-ids")
+    .bodyValue(mapOf("bookingIds" to listOf(bookingId)))
+    .retrieve()
+    .bodyToMono<List<PrisonerSearchPrisoner>>()
+    .block()
+    // A booking belongs to exactly one prisoner, so this is at most one result. firstOrNull rather
+    // than single, because an unknown booking id is a normal empty list, not an error.
+    ?.firstOrNull()
 }
 
 @JsonIgnoreProperties(ignoreUnknown = true)

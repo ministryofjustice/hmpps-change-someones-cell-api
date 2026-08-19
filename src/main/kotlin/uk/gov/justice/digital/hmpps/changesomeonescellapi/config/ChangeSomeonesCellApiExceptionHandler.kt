@@ -76,6 +76,18 @@ class ChangeSomeonesCellApiExceptionHandler {
       ),
     ).also { log.info("Prisoner not in prison: {}", e.message) }
 
+  @ExceptionHandler(CellMovementReasonNotFoundException::class)
+  fun handleCellMovementReasonNotFoundException(e: CellMovementReasonNotFoundException): ResponseEntity<ErrorResponse> = ResponseEntity
+    .status(NOT_FOUND)
+    .body(
+      ErrorResponse(
+        status = NOT_FOUND,
+        errorCode = ErrorCode.CellMovementReasonNotFound.name,
+        userMessage = "Not found: ${e.message}",
+        developerMessage = e.message,
+      ),
+    ).also { log.debug("Cell movement reason not found: {}", e.message) }
+
   @ExceptionHandler(DuplicateCellMovementException::class)
   fun handleDuplicateCellMovementException(e: DuplicateCellMovementException): ResponseEntity<ErrorResponse> = ResponseEntity
     .status(CONFLICT)
@@ -169,6 +181,16 @@ class PrisonerNotFoundException(prisonerNumber: String) : Exception("No prisoner
 class PrisonerNotInPrisonException(prisonerNumber: String) : Exception("Prisoner $prisonerNumber is not currently in a prison and cannot be moved")
 
 class DuplicateCellMovementException(prisonerNumber: String, locationKey: String) : Exception("Prisoner $prisonerNumber was already moved to $locationKey moments ago")
+
+/**
+ * No cell movement is recorded against this bed assignment, in either our own records or the ones
+ * migrated from whereabouts.
+ *
+ * Routine rather than exceptional: most bed assignments in NOMIS were never made through DPS at
+ * all, so a caller walking a prisoner's location history should expect this for most rows. Logged
+ * at debug for that reason, and it is the behaviour whereabouts already had.
+ */
+class CellMovementReasonNotFoundException(bookingId: Long, bedAssignmentSequence: Int) : Exception("No cell movement recorded for booking $bookingId bed assignment $bedAssignmentSequence")
 
 /**
  * prison-api rejected the move: the cell is full, not a cell or reception, inactive, in a
