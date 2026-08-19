@@ -41,12 +41,51 @@ class WhereaboutsApiClient(
   } catch (e: WebClientResponseException) {
     if (e.statusCode == HttpStatus.NOT_FOUND) null else throw e
   }
+
+  /**
+   * One keyset page of the full CELL_MOVE_REASON export, strictly after the cursor, in
+   * `(bookingId, bedAssignmentsSequence)` order. The one-off backfill's read - the second and
+   * final consumer of this class.
+   *
+   * An **empty list is the only terminator**: whereabouts sends no hasMore or total, so a page
+   * that happens to equal the page size proves nothing. The next cursor is the last element's key.
+   * Note the spelling asymmetry, faithfully whereabouts' own: the request parameter is
+   * `lastBedAssignmentSequence`, the response field `bedAssignmentsSequence`.
+   *
+   * No 404 handling - the endpoint returns an empty array rather than 404. A 401 here means the
+   * client is missing ROLE_CELL_MOVEMENTS__SYNC__RW (whereabouts maps AccessDenied to 401, not
+   * 403) and should propagate loudly rather than read as an empty table.
+   */
+  fun getCellMoveReasons(
+    lastBookingId: Long,
+    lastBedAssignmentSequence: Int,
+    pageSize: Int,
+  ): List<WhereaboutsCellMoveReason> = webClient
+    .get()
+    .uri {
+      it.path("/cell/cell-move-reasons")
+        .queryParam("lastBookingId", lastBookingId)
+        .queryParam("lastBedAssignmentSequence", lastBedAssignmentSequence)
+        .queryParam("pageSize", pageSize)
+        .build()
+    }
+    .retrieve()
+    .bodyToMono<WhereaboutsCellMoveReasonsResponse>()
+    .block()
+    ?.cellMoveReasons
+    .orEmpty()
 }
 
 /** whereabouts wraps the payload: `{"cellMoveReason": {...}}`. */
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class WhereaboutsCellMoveReasonResponse(
   val cellMoveReason: WhereaboutsCellMoveReason,
+)
+
+/** The export wraps its page the same way: `{"cellMoveReasons": [...]}`. */
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class WhereaboutsCellMoveReasonsResponse(
+  val cellMoveReasons: List<WhereaboutsCellMoveReason>,
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
