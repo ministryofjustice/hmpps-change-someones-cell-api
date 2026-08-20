@@ -12,6 +12,7 @@ import uk.gov.justice.digital.hmpps.changesomeonescellapi.client.PrisonerSearchP
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.config.DuplicateCellMovementException
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.config.PrisonerNotFoundException
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.config.PrisonerNotInPrisonException
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.CellMoveReasonCode
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.CellMovement
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.CellMovementRequest
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.CellSwapRequest
@@ -238,8 +239,11 @@ class CellMovementService(
     // Long enough to catch a double submit, short enough not to block a prisoner legitimately
     // being moved back to a cell later in the day.
     // What NOMIS already records for every cell swap. Ours, not prison-api's default, so the two
-    // cannot drift apart.
-    private const val CELL_SWAP_REASON_CODE = "ADM"
+    // cannot drift apart. Taken from the enum rather than written as a string so it is a member of
+    // the list this service serves by construction. Note ADM is *inactive*: it is not offered for a
+    // new move, and could not be posted as one - the swap journey asks the user for no reason at
+    // all, so it never passes through reasonCode validation.
+    private val CELL_SWAP_REASON_CODE = CellMoveReasonCode.ADM.code
     private val DUPLICATE_WINDOW: Duration = Duration.ofSeconds(60)
     private val log = LoggerFactory.getLogger(this::class.java)
   }

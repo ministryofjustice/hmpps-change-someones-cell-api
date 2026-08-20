@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.config.ValidCellMoveReason
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementStatus
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementType
 import java.time.LocalDateTime
@@ -28,12 +29,16 @@ data class CellMovementRequest(
   val toLocationKey: String,
 
   @get:Schema(
-    description = "The reason for the move, a code from the CHG_HOUS_RSN reference domain",
-    example = "ADM",
+    description = "The reason for the move. Must be a code GET /cell-movements/reasons returns " +
+      "with active=true - retired reasons are served for display but cannot be used for a new move",
+    example = "GM",
     requiredMode = Schema.RequiredMode.REQUIRED,
   )
   @get:NotBlank(message = "reasonCode must not be blank")
+  // Redundant now the code must be a known one, but kept because it documents the limit it mirrors:
+  // the code is sent on as the case note subType, which offender-case-notes caps at 12 characters.
   @get:Size(max = 12, message = "reasonCode must be no more than 12 characters")
+  @get:ValidCellMoveReason
   val reasonCode: String,
 
   @get:Schema(

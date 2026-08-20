@@ -61,8 +61,9 @@ class CellMovementResource(
       ),
       ApiResponse(
         responseCode = "400",
-        description = "Invalid request, or the cell cannot be used - it is full, inactive, not a cell or " +
-          "reception, in a different prison, or the reason code is not recognised",
+        description = "Invalid request - including a reasonCode this service does not offer for a new " +
+          "move, which is rejected here rather than by NOMIS - or the cell cannot be used because it is " +
+          "full, inactive, not a cell or reception, or in a different prison",
         content = [Content(mediaType = "application/json", schema = Schema(implementation = ErrorResponse::class))],
       ),
       ApiResponse(
