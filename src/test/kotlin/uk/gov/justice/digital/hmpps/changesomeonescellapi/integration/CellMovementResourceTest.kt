@@ -95,7 +95,7 @@ class CellMovementResourceTest : IntegrationTestBase() {
     assertThat(requests).hasSize(1)
     // lockTimeout is what makes NOMIS return 423 rather than block when the record is open in
     // P-NOMIS, so its absence would silently lose that behaviour.
-    assertThat(requests.first().url).contains("lockTimeout=true").contains("reasonCode=ADM")
+    assertThat(requests.first().url).contains("lockTimeout=true").contains("reasonCode=GM")
   }
 
   @Test
@@ -105,7 +105,7 @@ class CellMovementResourceTest : IntegrationTestBase() {
     val request = caseNotesApi.findAll(postRequestedFor(urlPathEqualTo("/case-notes/$PRISONER_NUMBER"))).single()
     // MOVED_CELL is a sync-to-nomis type, which case-notes refuses to write without a NOMIS user.
     assertThat(request.getHeader("Username")).isEqualTo(USER)
-    assertThat(request.bodyAsString).contains("\"type\":\"MOVED_CELL\"", "\"subType\":\"ADM\"", COMMENT)
+    assertThat(request.bodyAsString).contains("\"type\":\"MOVED_CELL\"", "\"subType\":\"GM\"", COMMENT)
   }
 
   @Test
@@ -203,6 +203,37 @@ class CellMovementResourceTest : IntegrationTestBase() {
       .expectStatus().isBadRequest
   }
 
+  /**
+   * Before MAPA-289 an unrecognised code reached prison-api, whose 400 is the same one it uses for
+   * a full cell - so the user was told the cell was unavailable. Now it fails here, and nothing is
+   * written: the row is only created once the request is past validation.
+   */
+  @Test
+  fun `rejects an unrecognised reason code without recording anything`() {
+    webTestClient.post().uri("/cell-movements")
+      .headers(setAuthorisation(username = USER, roles = writeRole))
+      .contentType(MediaType.APPLICATION_JSON)
+      .body(BodyInserters.fromValue(requestBody(reasonCode = "NOPE")))
+      .exchange()
+      .expectStatus().isBadRequest
+
+    assertThat(cellMovementRepository.findAll()).isEmpty()
+    assertThat(prisonApi.findAll(putRequestedFor(urlPathEqualTo("/api/bookings/$BOOKING_ID/living-unit/$TO_LOCATION_KEY")))).isEmpty()
+  }
+
+  /** Retired reasons are still served for display, but must not be used for a new move. */
+  @Test
+  fun `rejects a retired reason code`() {
+    webTestClient.post().uri("/cell-movements")
+      .headers(setAuthorisation(username = USER, roles = writeRole))
+      .contentType(MediaType.APPLICATION_JSON)
+      .body(BodyInserters.fromValue(requestBody(reasonCode = "ADM")))
+      .exchange()
+      .expectStatus().isBadRequest
+
+    assertThat(cellMovementRepository.findAll()).isEmpty()
+  }
+
   @Test
   fun `rejects a blank comment`() {
     webTestClient.post().uri("/cell-movements")
@@ -264,7 +295,9 @@ class CellMovementResourceTest : IntegrationTestBase() {
   private fun requestBody(
     prisonerNumber: String = PRISONER_NUMBER,
     toLocationKey: String = TO_LOCATION_KEY,
-    reasonCode: String = "ADM",
+    // An active reason. ADM, the old default here, is a retired code and is no longer accepted for
+    // a new move - see CellMoveReasonCode.
+    reasonCode: String = "GM",
     comment: String = COMMENT,
   ) = """
     {
