@@ -7,8 +7,12 @@ import org.springframework.jdbc.core.JdbcTemplate
 
 /**
  * Proves the MAPA-277 acceptance criterion "Postgres instance provisioned and Flyway runs on
- * startup". The service has no business tables yet, so the observable evidence that the
- * datasource works and migrations ran is flyway_schema_history itself.
+ * startup". The service had no business tables when this was written, so the observable evidence
+ * that the datasource works and migrations ran is flyway_schema_history itself.
+ *
+ * containsExactly rather than contains: the previous assertion silently stopped covering V5, because
+ * a non-exhaustive check passes however many migrations are added after it. Adding a migration now
+ * fails here until the list is updated, which is the point.
  */
 class FlywayMigrationTest : IntegrationTestBase() {
 
@@ -22,6 +26,6 @@ class FlywayMigrationTest : IntegrationTestBase() {
       String::class.java,
     )
 
-    assertThat(applied).contains("1", "2", "3", "4")
+    assertThat(applied).containsExactly("1", "2", "3", "4", "5", "6")
   }
 }
