@@ -1,0 +1,27 @@
+services:
+  # Postgres must listen on the standard 5432 rather than a random Testcontainers port. PostgresContainer
+  # defers to an already-running database (see isPostgresRunning), so InitialiseDatabase migrates *this*
+  # container and SchemaSpy can then read the same schema. Left to Testcontainers, the schema would be
+  # built in an ephemeral container that dies with the JVM.
+  #
+  # No localstack here, unlike the sibling services: nothing in this service uses SQS or SNS. The
+  # localstack in docker-compose.yml is unused template scaffolding.
+  postgres:
+    image: postgres:18
+    networks:
+      - hmpps
+    container_name: change-someones-cell-schema-spy-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=change_someones_cell
+      - POSTGRES_USER=change_someones_cell
+      - POSTGRES_PASSWORD=change_someones_cell
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "change_someones_cell", "-d", "change_someones_cell"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+networks:
+  hmpps:

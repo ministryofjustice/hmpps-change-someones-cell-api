@@ -51,6 +51,63 @@ UI rather than having its own.
 Tests reuse a Postgres already listening on 5432 if there is one, and otherwise start a
 testcontainer, so `docker compose up` first makes the test loop faster but is not required.
 
+## Data dictionary
+
+A browsable schema report is published from `main` to
+[ministryofjustice.github.io/hmpps-change-someones-cell-api/schema-spy-report](https://ministryofjustice.github.io/hmpps-change-someones-cell-api/schema-spy-report/),
+along with two CSV exports for the MOJ Data Catalogue:
+
+| File | Contents |
+| --- | --- |
+| `data-dictionary.csv` | One row per column: table, column, type, nullability, default, description, sensitivity classification, primary key flag and foreign key target. |
+| `reference-data.csv` | The permitted values behind the coded columns. Every code here is an unconstrained `varchar` with no check constraint — deliberately, so adding a state stays a code change rather than a migration — so without this a consumer sees a `varchar(20)` and no legal values. |
+
+The report is generated from a database built by Flyway, so it cannot drift from the migrations.
+Descriptions live in the database itself as `COMMENT ON` statements, applied by
+[`V6__schema_comments.sql`](src/main/resources/db/migration/V6__schema_comments.sql), so the report,
+the CSVs and any Glue crawl share one source of truth.
+
+To regenerate it locally:
+
+```shell
+docker compose -f docker-compose-schema-spy.yml up -d --wait
+./gradlew -Pinit-db=true test --tests '*InitialiseDatabase' --tests '*ExportReferenceData'
+docker run --rm --network host -v /tmp/schemaspy:/output schemaspy/schemaspy:6.2.4 \
+  -t pgsql -host localhost -port 5432 -db change_someones_cell -s public \
+  -u change_someones_cell -p change_someones_cell -vizjs
+scripts/generate-data-dictionary.sh
+```
+
+Tear the database down with `docker compose -f docker-compose-schema-spy.yml down -v` afterwards.
+Editing the comments migration while the container is still up gives a Flyway checksum mismatch on
+the next run.
+
+### Data sensitivity
+
+Every column description ends with a classification tag:
+
+| Tag | Meaning |
+| --- | --- |
+| `[Sensitivity: NONE]` | Not personal data in itself — keys, timestamps, process flags |
+| `[Sensitivity: PERSONAL]` | Personal data about a prisoner — identifies or locates them |
+| `[Sensitivity: STAFF]` | Personal data about a member of staff, typically the username that acted |
+| `[Sensitivity: SPECIAL-CATEGORY]` | UK GDPR Article 9 data, or offence data under Article 10 |
+| `[Sensitivity: OFFICIAL-SENSITIVE]` | Not personal data, but damaging if disclosed |
+
+Almost every column here is about a named prisoner, so this schema is proportionally the most
+sensitive of the services publishing a dictionary: of 25 columns, 12 are `PERSONAL` and 4 are
+`SPECIAL-CATEGORY`.
+
+**`reason_code` is special category, and that is not obvious from its name.** It is a short code, but
+the `CHG_HOUS_RSN` vocabulary includes `HOSP` (Healthcare), `VP` (Vulnerable Prisoner), `SS`
+(Someone's safety), `CON` (Conflict with Other Prisoners) and `BEH` (Behaviour). Knowing a named
+prisoner was moved for one of those reveals their health or safeguarding status. The sensitivity is in
+the values, not the field label — `reference-data.csv` lists them all.
+
+**Any new table or column needs a `COMMENT ON`** in a migration — `SchemaCommentsTest` fails the build
+otherwise. A later migration can add to or replace any comment at any time. Likewise a new enum value
+needs a description in `ExportReferenceData`, which fails rather than exporting a blank row.
+
 ## Common Kotlin patterns
 
 Many patterns have evolved for HMPPS Kotlin applications. Using these patterns provides consistency across our suite of
