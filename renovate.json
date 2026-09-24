@@ -16,5 +16,6 @@
       "enabled": false
     }
   ],
-  "platformCommit": "enabled"
+  "platformCommit": "enabled",
+  "prCreation": "immediate"
 }
