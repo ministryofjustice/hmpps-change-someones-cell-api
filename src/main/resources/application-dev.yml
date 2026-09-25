@@ -26,3 +26,9 @@ spring:
     url: 'jdbc:postgresql://${DATABASE_ENDPOINT:localhost:5432}/${DATABASE_NAME:change_someones_cell}?sslmode=prefer'
     username: ${DATABASE_USERNAME:change_someones_cell}
     password: ${DATABASE_PASSWORD:change_someones_cell}
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
