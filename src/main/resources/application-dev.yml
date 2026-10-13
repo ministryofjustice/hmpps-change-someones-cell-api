@@ -32,3 +32,17 @@ springdoc:
     enabled: true
   swagger-ui:
     enabled: true
+# The prisoner event queue (MAPA-438), on the LocalStack from docker-compose.yml. hmpps-sqs creates the
+# topic, the queue and the filtered subscription on start-up. Deployed environments name a real queue
+# through the HMPPS_SQS_QUEUES_PRISONEREVENTS_* variables in the helm values instead.
+hmpps.sqs:
+  provider: localstack
+  queues:
+    prisonerevents:
+      queueName: cell-move-prisoner-event-queue
+      dlqName: cell-move-prisoner-event-dlq
+      subscribeTopicId: domainevents
+      subscribeFilter: '{"eventType":["prison-offender-events.prisoner.merged","prison-offender-events.prisoner.booking.moved"]}'
+  topics:
+    domainevents:
+      arn: arn:aws:sns:eu-west-2:000000000000:hmpps-domain-events

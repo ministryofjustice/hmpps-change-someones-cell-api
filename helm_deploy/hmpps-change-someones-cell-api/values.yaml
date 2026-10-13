@@ -4,6 +4,10 @@ generic-service:
 
   replicaCount: 4
 
+  # Created by irsa.tf in the hmpps-prisoner-cell-allocation namespaces. Gives the pods read access to
+  # the prisoner event queue (MAPA-438).
+  serviceAccountName: hmpps-change-someones-cell-api
+
   image:
     repository: ghcr.io/ministryofjustice/hmpps-change-someones-cell-api
     tag: app_version # override at deployment time
@@ -50,6 +54,11 @@ generic-service:
       DATABASE_PASSWORD: "database_password"
       SPRING_FLYWAY_USER: "database_username"
       SPRING_FLYWAY_PASSWORD: "database_password"
+    # Prisoner merged and booking moved events (MAPA-438), from sqs.tf in the same namespaces.
+    sqs-prisoner-event-queue-secret:
+      HMPPS_SQS_QUEUES_PRISONEREVENTS_QUEUE_NAME: "sqs_queue_name"
+    sqs-prisoner-event-queue-dlq-secret:
+      HMPPS_SQS_QUEUES_PRISONEREVENTS_DLQ_NAME: "sqs_queue_name"
 
   # Set explicitly rather than inherited. The hmpps-prisoner-cell-allocation namespaces default
   # containers to a 1024Mi memory limit (02-limitrange.yaml), which a JVM can exceed.

@@ -17,7 +17,8 @@ import java.util.UUID
  * The first three fields are the link exactly as whereabouts held it, copied by the one-off sweep.
  * The rest was resolved by the completed backfill from the case note the link points at - the only
  * place the prisoner number, reason code, explanation and timestamp survived, because the source
- * table held none of them. Nothing writes here any more: the table is history, read as it stands.
+ * table held none of them. The table is history, read as it stands, with one exception: the prisoner
+ * number follows the booking when NOMIS merges prisoner numbers or moves a booking (MAPA-438).
  *
  * New movements go in [CellMovementEntity]; nothing here is ever a movement this service made.
  */
