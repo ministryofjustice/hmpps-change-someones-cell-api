@@ -41,3 +41,17 @@ spring:
     hikari:
       pool-name: CSC-API-DB-CP
       maximum-pool-size: 10
+
+# The prisoner event queue (MAPA-438), on LocalStack. Random names keep each Spring context to its own
+# topic and queue. hmpps-sqs creates them and the filtered subscription on start-up.
+hmpps.sqs:
+  provider: localstack
+  queues:
+    prisonerevents:
+      queueName: ${random.uuid}
+      dlqName: ${random.uuid}
+      subscribeTopicId: domainevents
+      subscribeFilter: '{"eventType":["prison-offender-events.prisoner.merged","prison-offender-events.prisoner.booking.moved"]}'
+  topics:
+    domainevents:
+      arn: arn:aws:sns:eu-west-2:000000000000:${random.uuid}

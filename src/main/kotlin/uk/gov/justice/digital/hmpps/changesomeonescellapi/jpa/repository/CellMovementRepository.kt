@@ -1,6 +1,9 @@
 package uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.repository
 
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
 import org.springframework.stereotype.Repository
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementEntity
 import java.time.LocalDateTime
@@ -32,4 +35,17 @@ interface CellMovementRepository : JpaRepository<CellMovementEntity, UUID> {
     bookingId: Long,
     bedAssignmentSequence: Int,
   ): CellMovementEntity?
+
+  /** Moves every movement from a prisoner number NOMIS has merged away (MAPA-438). Returns the rows moved. */
+  @Modifying
+  @Query("update CellMovementEntity m set m.prisonerNumber = :retained where m.prisonerNumber = :removed")
+  fun reassignPrisonerNumber(@Param("removed") removed: String, @Param("retained") retained: String): Int
+
+  /**
+   * Moves every movement for a booking to the prisoner number NOMIS has moved it to (MAPA-438). Returns
+   * the rows moved, so a redelivery reports zero.
+   */
+  @Modifying
+  @Query("update CellMovementEntity m set m.prisonerNumber = :movedTo where m.bookingId = :bookingId and m.prisonerNumber <> :movedTo")
+  fun reassignBooking(@Param("bookingId") bookingId: Long, @Param("movedTo") movedTo: String): Int
 }

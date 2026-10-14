@@ -16,6 +16,7 @@ services:
       - DATABASE_NAME=change_someones_cell
       - DATABASE_USERNAME=change_someones_cell
       - DATABASE_PASSWORD=change_someones_cell
+      - HMPPS_SQS_LOCALSTACKURL=http://localstack:4566
 
   change-someones-cell-db:
     image: postgres:18

@@ -51,6 +51,20 @@ UI rather than having its own.
 Tests reuse a Postgres already listening on 5432 if there is one, and otherwise start a
 testcontainer, so `docker compose up` first makes the test loop faster but is not required.
 
+## Prisoner events
+
+Every cell movement carries the prisoner number it was recorded against. When NOMIS merges two
+prisoner numbers, or moves a booking from one prisoner number to another, the API moves its records
+with them (MAPA-438). It reads `prison-offender-events.prisoner.merged` and
+`prison-offender-events.prisoner.booking.moved` from its own queue on the HMPPS domain events topic;
+the queue, dead letter queue and service account are in `sqs.tf`, `hmpps-events.tf` and `irsa.tf` in
+the same namespaces as the database. Each change is recorded in Application Insights as
+`cell-movement-prisoner-merge` or `cell-movement-booking-moved`, with a `-no-op` form when there was
+nothing to move.
+
+Locally the queue runs on LocalStack: `docker compose up` starts one, and the tests reuse one on 4566
+or start their own.
+
 ## Data dictionary
 
 A browsable schema report is published from `main` to
