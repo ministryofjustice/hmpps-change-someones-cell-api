@@ -32,11 +32,29 @@ class PrisonerSearchClient(
   } catch (e: WebClientResponseException) {
     if (e.statusCode == HttpStatus.NOT_FOUND) null else throw e
   }
+
+  /**
+   * Looks up several prisoners in one call. Prisoner numbers prisoner-search does not know are
+   * simply absent from the result.
+   */
+  fun findPrisoners(prisonerNumbers: Collection<String>): List<PrisonerSearchPrisoner> {
+    if (prisonerNumbers.isEmpty()) return emptyList()
+    return webClient
+      .post()
+      .uri("/prisoner-search/prisoner-numbers")
+      .bodyValue(mapOf("prisonerNumbers" to prisonerNumbers.distinct()))
+      .retrieve()
+      .bodyToMono<List<PrisonerSearchPrisoner>>()
+      .block()
+      .orEmpty()
+  }
 }
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class PrisonerSearchPrisoner(
   val prisonerNumber: String,
+  val firstName: String? = null,
+  val lastName: String? = null,
   /** A string here even though NOMIS holds a number, because prisoner-search indexes it as a keyword. */
   val bookingId: String? = null,
   /** The current prison, or OUT / TRN when the prisoner is not inside one. */

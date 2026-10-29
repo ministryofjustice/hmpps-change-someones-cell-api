@@ -25,7 +25,13 @@ class LocationsInsidePrisonApiClient(
   @param:Qualifier("locationsInsidePrisonApiWebClient") private val webClient: WebClient,
 ) {
   /** The LIP UUID for each resolvable key. Unrecognised keys are absent; on failure the map is empty. */
-  fun resolveKeys(keys: Collection<String>): Map<String, UUID> {
+  fun resolveKeys(keys: Collection<String>): Map<String, UUID> = getLocationsByKeys(keys).mapValues { it.value.id }
+
+  /**
+   * The LIP location for each resolvable key, on the same best-effort terms as [resolveKeys]. Used
+   * where a display name is wanted too - callers must cope with a key being absent.
+   */
+  fun getLocationsByKeys(keys: Collection<String>): Map<String, LipLocation> {
     if (keys.isEmpty()) return emptyMap()
     return try {
       webClient
@@ -36,7 +42,7 @@ class LocationsInsidePrisonApiClient(
         .bodyToMono<List<LipLocation>>()
         .block()
         .orEmpty()
-        .associate { it.key to it.id }
+        .associateBy { it.key }
     } catch (e: Exception) {
       log.warn("Could not resolve location keys {} through locations-inside-prison: {}", keys, e.message)
       emptyMap()
@@ -52,4 +58,6 @@ class LocationsInsidePrisonApiClient(
 data class LipLocation(
   val id: UUID,
   val key: String,
+  /** The key without the prison prefix, e.g. A-1-015. */
+  val pathHierarchy: String? = null,
 )

@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Pattern
+import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.security.access.prepost.PreAuthorize
@@ -16,16 +18,20 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.config.Roles
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.CellMovement
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.CellMovementReason
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.CellMovementRequest
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.CellSharingHistory
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.CellSwapRequest
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.service.CellMovementReasonService
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.service.CellMovementService
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.service.CellSharingService
 import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
+import java.time.LocalDateTime
 
 /**
  * Roles are declared per method rather than on the class. Reading a movement and recording one are
@@ -40,6 +46,7 @@ import uk.gov.justice.hmpps.kotlin.common.ErrorResponse
 class CellMovementResource(
   private val cellMovementService: CellMovementService,
   private val cellMovementReasonService: CellMovementReasonService,
+  private val cellSharingService: CellSharingService,
 ) {
 
   @PostMapping
@@ -205,4 +212,63 @@ class CellMovementResource(
     @Parameter(description = "The NOMIS bed assignment sequence within that booking", example = "3")
     @PathVariable bedAssignmentSequence: Int,
   ): CellMovementReason = cellMovementReasonService.findByBedAssignment(bookingId, bedAssignmentSequence)
+
+  @GetMapping("/prisoner/{prisonerNumber}/cell-sharing")
+  @PreAuthorize("hasRole('${Roles.CELL_MOVEMENTS_RO}')")
+  @Operation(
+    summary = "Get who a prisoner shared a cell with during a period",
+    description = "Returns each cell stay during the period in which the prisoner shared with at least one other " +
+      "prisoner, most recent first, with every cellmate's prisoner number and name. Stays where they were alone " +
+      "are left out, as are reception, court, temporary absence and cell swap. Covers all of the prisoner's " +
+      "bookings, so a period before a release and readmission works. " +
+      "Built for the CSRA, to show who a prisoner rated high risk - specific (provisional) shared with while that " +
+      "rating stood. " +
+      "Only time inside the period counts: a cellmate who left before `from` or arrived after `to` is not listed, " +
+      "and someone who moved in at the same minute the prisoner moved out did not share. " +
+      "The response carries no NOMIS booking ids or bed assignment sequences. It does include the NOMIS location " +
+      "id, only so the caller can link to the prisoner profile location history page; that field will be removed " +
+      "once the page accepts a DPS location id. " +
+      "Requires role ROLE_CELL_MOVEMENTS__RO",
+    responses = [
+      ApiResponse(
+        responseCode = "200",
+        description = "The cells the prisoner shared during the period - an empty list if none",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = CellSharingHistory::class))],
+      ),
+      ApiResponse(
+        responseCode = "400",
+        description = "Invalid request - a badly formed prisoner number or date, a missing `from`, or `from` after `to`",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = ErrorResponse::class))],
+      ),
+      ApiResponse(
+        responseCode = "401",
+        description = "Unauthorized to access this endpoint",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = ErrorResponse::class))],
+      ),
+      ApiResponse(
+        responseCode = "403",
+        description = "Missing required role. Requires the ROLE_CELL_MOVEMENTS__RO role",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = ErrorResponse::class))],
+      ),
+      ApiResponse(
+        responseCode = "404",
+        description = "No such prisoner",
+        content = [Content(mediaType = "application/json", schema = Schema(implementation = ErrorResponse::class))],
+      ),
+    ],
+  )
+  fun getCellSharing(
+    @Parameter(description = "The prisoner number", example = "A1234AA")
+    @PathVariable
+    @Pattern(regexp = "^[A-Z][0-9]{4}[A-Z]{2}$", message = "prisonerNumber must be in the format A1234BC")
+    prisonerNumber: String,
+    @Parameter(description = "Start of the period, e.g. when a provisional rating was confirmed", example = "2026-07-06T21:07:00")
+    @RequestParam
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    from: LocalDateTime,
+    @Parameter(description = "End of the period. Leave out to cover up to now.", example = "2026-07-09T10:15:00")
+    @RequestParam(required = false)
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    to: LocalDateTime?,
+  ): CellSharingHistory = cellSharingService.getCellSharing(prisonerNumber, from, to)
 }
