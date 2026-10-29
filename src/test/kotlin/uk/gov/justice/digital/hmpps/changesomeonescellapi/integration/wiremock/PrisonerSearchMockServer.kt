@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.changesomeonescellapi.integration.wiremock
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import com.github.tomakehurst.wiremock.client.WireMock.get
+import com.github.tomakehurst.wiremock.client.WireMock.post
 import com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 import org.junit.jupiter.api.extension.AfterAllCallback
 import org.junit.jupiter.api.extension.BeforeAllCallback
@@ -110,6 +111,21 @@ class PrisonerSearchMockServer : WireMockServer(WIREMOCK_PORT) {
           .withHeader("Content-Type", "application/json")
           .withBody("""{"status":404,"userMessage":"$prisonerNumber not found"}""")
           .withStatus(404),
+      ),
+    )
+  }
+
+  /** The batch lookup. Each triple is prisoner number, first name, last name. */
+  fun stubFindPrisoners(vararg prisoners: Triple<String, String, String>) {
+    val body = prisoners.joinToString(",", "[", "]") { (prisonerNumber, firstName, lastName) ->
+      """{"prisonerNumber": "$prisonerNumber", "firstName": "$firstName", "lastName": "$lastName", "prisonId": "LEI"}"""
+    }
+    stubFor(
+      post(urlPathEqualTo("/prisoner-search/prisoner-numbers")).willReturn(
+        aResponse()
+          .withHeader("Content-Type", "application/json")
+          .withBody(body)
+          .withStatus(200),
       ),
     )
   }

@@ -9,10 +9,13 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import org.springframework.web.reactive.function.client.bodyToMono
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.config.CellNotAvailableException
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.config.CellSwapUnavailableException
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.config.PrisonerNotFoundException
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.config.PrisonerRecordLockedException
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
- * Performs the actual cell move in NOMIS.
+ * Performs the actual cell move in NOMIS, and reads NOMIS cell history.
  *
  * The endpoint is `@ProxyUser`, so the username carried on our token is what NOMIS records in its
  * audit columns - see WebClientConfiguration for how that gets there.
@@ -65,6 +68,37 @@ class PrisonApiClient(
   )
 
   /**
+   * Every cell stay the prisoner had, on any booking, that overlaps [from]..[to], newest first.
+   * Includes reception, court, TAP and cell swap - filtering those is the caller's job.
+   */
+  fun getCellHistory(prisonerNumber: String, from: LocalDateTime, to: LocalDateTime): List<BedAssignment> = try {
+    webClient
+      .get()
+      .uri(
+        "/api/offenders/{prisonerNumber}/cell-history?fromDate={fromDate}&toDate={toDate}",
+        mapOf("prisonerNumber" to prisonerNumber, "fromDate" to from.format(DATE_TIME), "toDate" to to.format(DATE_TIME)),
+      )
+      .retrieve()
+      .bodyToMono<List<BedAssignment>>()
+      .block()
+      .orEmpty()
+  } catch (e: WebClientResponseException) {
+    if (e.statusCode == HttpStatus.NOT_FOUND) throw PrisonerNotFoundException(prisonerNumber) else throw e
+  }
+
+  /** Everyone, on any booking, whose stay in the cell [livingUnitId] overlaps [from]..[to]. */
+  fun getCellOccupancy(livingUnitId: Long, from: LocalDateTime, to: LocalDateTime): List<BedAssignment> = webClient
+    .get()
+    .uri(
+      "/api/cell/{livingUnitId}/history?fromDate={fromDate}&toDate={toDate}",
+      mapOf("livingUnitId" to livingUnitId, "fromDate" to from.format(DATE_TIME), "toDate" to to.format(DATE_TIME)),
+    )
+    .retrieve()
+    .bodyToMono<List<BedAssignment>>()
+    .block()
+    .orEmpty()
+
+  /**
    * The one call that moves a booking. Shared by the ordinary move and the cell swap, which differ
    * only in the key they send and in what a rejection means.
    *
@@ -106,6 +140,11 @@ class PrisonApiClient(
       else -> throw e
     }
   }
+
+  private companion object {
+    // Explicit rather than LocalDateTime.toString(), which drops the seconds when they are zero.
+    val DATE_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+  }
 }
 
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -119,4 +158,21 @@ data class CellMoveResult(
    * successful no-op rather than an error.
    */
   val bedAssignmentHistorySequence: Int? = null,
+)
+
+/**
+ * A NOMIS bed assignment - one stay by one booking in one living unit. Internal to this service:
+ * its NOMIS identifiers are never passed on to our own callers.
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class BedAssignment(
+  val bookingId: Long,
+  val livingUnitId: Long,
+  val assignmentDateTime: LocalDateTime,
+  /** Null while the stay is open. */
+  val assignmentEndDateTime: LocalDateTime? = null,
+  val agencyId: String? = null,
+  /** The location key, e.g. MDI-1-1-015 or MDI-RECP. */
+  val description: String? = null,
+  val offenderNo: String? = null,
 )

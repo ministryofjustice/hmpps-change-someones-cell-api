@@ -18,6 +18,7 @@ Consumers:
 
 - [`hmpps-change-someones-cell`](https://github.com/ministryofjustice/hmpps-change-someones-cell) - the UI that performs cell and reception moves
 - [`hmpps-prisoner-profile`](https://github.com/ministryofjustice/hmpps-prisoner-profile) - reads "what happened" on the location history page
+- [`hmpps-cell-sharing-risk-assessment-ui`](https://github.com/ministryofjustice/hmpps-cell-sharing-risk-assessment-ui) - reads who a prisoner shared a cell with while provisionally rated high risk - specific (MAPA-477)
 
 ## Roles
 

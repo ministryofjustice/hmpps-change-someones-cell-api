@@ -35,6 +35,29 @@ class PrisonApiExtension :
 class PrisonApiMockServer : WireMockServer(WIREMOCK_PORT) {
   companion object {
     private const val WIREMOCK_PORT = 8091
+
+    /** A prison-api BedAssignment as JSON. [locationKey] is the NOMIS description, e.g. LEI-A-1-015. */
+    fun bedAssignment(
+      bookingId: Long,
+      offenderNo: String,
+      livingUnitId: Long,
+      locationKey: String,
+      from: String,
+      to: String? = null,
+    ): String = """
+      {
+        "bookingId": $bookingId,
+        "offenderNo": "$offenderNo",
+        "livingUnitId": $livingUnitId,
+        "agencyId": "${locationKey.substringBefore('-')}",
+        "description": "$locationKey",
+        "assignmentDate": "${from.substringBefore('T')}",
+        "assignmentDateTime": "$from",
+        ${if (to == null) "" else "\"assignmentEndDate\": \"${to.substringBefore('T')}\", \"assignmentEndDateTime\": \"$to\","}
+        "assignmentReason": "ADM",
+        "bedAssignmentHistorySequence": 1
+      }
+    """.trimIndent()
   }
 
   fun stubHealthPing(status: Int) {
@@ -129,6 +152,41 @@ class PrisonApiMockServer : WireMockServer(WIREMOCK_PORT) {
           .withHeader("Content-Type", "application/json")
           .withBody(body)
           .withStatus(status),
+      ),
+    )
+  }
+
+  /** The prisoner's cell history across all bookings. [stays] are JSON objects - see [bedAssignment]. */
+  fun stubCellHistory(prisonerNumber: String, vararg stays: String) {
+    stubFor(
+      get(urlPathEqualTo("/api/offenders/$prisonerNumber/cell-history")).willReturn(
+        aResponse()
+          .withHeader("Content-Type", "application/json")
+          .withBody(stays.joinToString(",", "[", "]"))
+          .withStatus(200),
+      ),
+    )
+  }
+
+  fun stubCellHistoryNotFound(prisonerNumber: String) {
+    stubFor(
+      get(urlPathEqualTo("/api/offenders/$prisonerNumber/cell-history")).willReturn(
+        aResponse()
+          .withHeader("Content-Type", "application/json")
+          .withBody("""{"status":404}""")
+          .withStatus(404),
+      ),
+    )
+  }
+
+  /** Everyone in a cell over a period. [stays] are JSON objects - see [bedAssignment]. */
+  fun stubCellOccupancy(livingUnitId: Long, vararg stays: String) {
+    stubFor(
+      get(urlPathEqualTo("/api/cell/$livingUnitId/history")).willReturn(
+        aResponse()
+          .withHeader("Content-Type", "application/json")
+          .withBody(stays.joinToString(",", "[", "]"))
+          .withStatus(200),
       ),
     )
   }
