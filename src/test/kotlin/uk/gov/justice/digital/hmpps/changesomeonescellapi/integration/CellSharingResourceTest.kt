@@ -211,6 +211,37 @@ class CellSharingResourceTest : IntegrationTestBase() {
   }
 
   @Test
+  fun `gives the real dates of sharing that began before or ended after the period`() {
+    prisonApi.stubCellHistory(
+      PRISONER,
+      bedAssignment(OWN_BOOKING, PRISONER, 100, "LEI-A-1-015", from = "2026-08-01T15:11:34"),
+    )
+    prisonApi.stubCellOccupancy(
+      100,
+      bedAssignment(OWN_BOOKING, PRISONER, 100, "LEI-A-1-015", from = "2026-08-01T15:11:34"),
+      bedAssignment(10, "A1245XY", 100, "LEI-A-1-015", from = "2026-08-01T15:12:00"),
+      bedAssignment(11, "A2222BB", 100, "LEI-A-1-015", from = "2026-07-20T09:00:00", to = "2026-08-13T08:00:00"),
+    )
+    prisonerSearch.stubFindPrisoners(Triple("A1245XY", "James", "Clive"), Triple("A2222BB", "Sam", "Jones"))
+    locationsInsidePrison.stubResolveKeys("LEI-A-1-015" to LOCATION_ID)
+
+    webTestClient.get().uri("/cell-movements/prisoner/$PRISONER/cell-sharing?from=2026-08-10T00:00:00&to=2026-08-12T00:00:00")
+      .headers(setAuthorisation(roles = readRole))
+      .exchange()
+      .expectStatus().isOk
+      .expectBody()
+      .jsonPath("$.cells[0].movedIn").isEqualTo("2026-08-01T15:11:34")
+      .jsonPath("$.cells[0].sharedWith.length()").isEqualTo(2)
+      // Earliest sharing first.
+      .jsonPath("$.cells[0].sharedWith[0].prisonerNumber").isEqualTo("A2222BB")
+      .jsonPath("$.cells[0].sharedWith[0].sharedFrom").isEqualTo("2026-08-01T15:11:34")
+      .jsonPath("$.cells[0].sharedWith[0].sharedTo").isEqualTo("2026-08-13T08:00:00")
+      .jsonPath("$.cells[0].sharedWith[1].prisonerNumber").isEqualTo("A1245XY")
+      .jsonPath("$.cells[0].sharedWith[1].sharedFrom").isEqualTo("2026-08-01T15:12:00")
+      .jsonPath("$.cells[0].sharedWith[1].sharedTo").isEmpty
+  }
+
+  @Test
   fun `lists a cellmate once when they shared more than once during the same stay`() {
     prisonApi.stubCellHistory(
       PRISONER,
