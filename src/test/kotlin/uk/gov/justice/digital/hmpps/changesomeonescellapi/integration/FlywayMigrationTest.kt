@@ -26,6 +26,6 @@ class FlywayMigrationTest : IntegrationTestBase() {
       String::class.java,
     )
 
-    assertThat(applied).containsExactly("1", "2", "3", "4", "5", "6", "7")
+    assertThat(applied).containsExactly("1", "2", "3", "4", "5", "6", "7", "8")
   }
 }
