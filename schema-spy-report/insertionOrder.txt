@@ -1,3 +1,5 @@
 cell_movement
+bed_assignment
+bed_assignment_nomis
 cell_movement_nomis
 flyway_schema_history
