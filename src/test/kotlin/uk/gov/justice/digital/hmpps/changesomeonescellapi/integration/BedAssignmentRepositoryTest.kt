@@ -49,7 +49,6 @@ class BedAssignmentRepositoryTest : IntegrationTestBase() {
 
     with(bedAssignmentRepository.findById(saved.id!!).orElseThrow()) {
       assertThat(prisonerNumber).isEqualTo("A1234AA")
-      assertThat(bookingId).isEqualTo(1234L)
       assertThat(locationId).isEqualTo(cellId)
       assertThat(locationKey).isEqualTo("MDI-A-1-001")
       assertThat(startAt).isEqualTo(firstAssigned)
@@ -126,7 +125,6 @@ class BedAssignmentRepositoryTest : IntegrationTestBase() {
     val assignment = bedAssignmentRepository.save(
       BedAssignmentEntity(
         prisonerNumber = "A1234AA",
-        bookingId = 1234L,
         locationId = locationId,
         locationKey = locationKey,
         startAt = startAt,

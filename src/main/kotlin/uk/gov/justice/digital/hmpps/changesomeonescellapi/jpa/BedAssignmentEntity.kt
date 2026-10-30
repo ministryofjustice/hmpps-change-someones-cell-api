@@ -29,9 +29,9 @@ class BedAssignmentEntity(
   @Column(name = "id", updatable = false, nullable = false)
   val id: UUID? = null,
 
+  // No booking id: an assignment belongs to the prisoner over time, and a narrower view is a time range
+  // (ADR-NX-04). The NOMIS booking id is kept only as provenance, in BedAssignmentNomisEntity.
   var prisonerNumber: String,
-
-  var bookingId: Long,
 
   // The locations-inside-prison UUID. Null when the NOMIS living unit has no equivalent there: the row
   // is kept, identified only by locationKey.
