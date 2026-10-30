@@ -43,7 +43,7 @@ class CellSharingService(
     val ownBookings = stays.map { it.bookingId }.toSet()
 
     val shares = stays.mapNotNull { stay ->
-      val sharedWith = cellmates(stay, ownBookings, prisonerNumber, from, to, until)
+      val sharedWith = cellmates(stay, ownBookings, prisonerNumber, from, until)
       if (sharedWith.isEmpty()) null else stay to sharedWith
     }
 
@@ -81,6 +81,8 @@ class CellSharingService(
   /**
    * Everyone else in the cell during the part of [stay] inside the period, one entry per person.
    *
+   * The period only decides who is listed. The dates are when the two actually shared, as the prisoner
+   * profile location history shows them, so sharing that began before the period keeps its real start.
    * Overlap is strict: someone who moved in at the same minute the prisoner moved out did not share.
    * The prisoner's own records are excluded by booking as well as by number, so a stay on an earlier
    * booking, or under a number since merged, is never reported as a cellmate.
@@ -90,7 +92,6 @@ class CellSharingService(
     ownBookings: Set<Long>,
     prisonerNumber: String,
     from: LocalDateTime,
-    to: LocalDateTime?,
     until: LocalDateTime,
   ): List<Cellmate> {
     val windowStart = maxOf(stay.assignmentDateTime, from)
@@ -99,11 +100,14 @@ class CellSharingService(
 
     return prisonApiClient.getCellOccupancy(stay.livingUnitId, windowStart, windowEnd)
       .filterNot { it.bookingId in ownBookings || it.offenderNo == prisonerNumber || it.offenderNo == null }
-      .mapNotNull { other ->
-        val sharedFrom = maxOf(windowStart, other.assignmentDateTime)
-        // Null while both are still in the cell and the caller gave no end to the period.
-        val sharedTo = listOfNotNull(stay.assignmentEndDateTime, other.assignmentEndDateTime, to).minOrNull()
-        if (sharedFrom.isBefore(sharedTo ?: until)) Cellmate(other.offenderNo!!, null, null, sharedFrom, sharedTo) else null
+      .filter { other ->
+        maxOf(windowStart, other.assignmentDateTime).isBefore(minOf(windowEnd, other.assignmentEndDateTime ?: until))
+      }
+      .map { other ->
+        val sharedFrom = maxOf(stay.assignmentDateTime, other.assignmentDateTime)
+        // Null while both are still in the cell.
+        val sharedTo = listOfNotNull(stay.assignmentEndDateTime, other.assignmentEndDateTime).minOrNull()
+        Cellmate(other.offenderNo!!, null, null, sharedFrom, sharedTo)
       }
       .groupBy { it.prisonerNumber }
       .map { (_, periods) ->
