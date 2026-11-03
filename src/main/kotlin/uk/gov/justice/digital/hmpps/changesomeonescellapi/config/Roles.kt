@@ -13,4 +13,7 @@ object Roles {
 
   /** Record a cell movement. */
   const val CELL_MOVEMENTS_RW = "ROLE_CELL_MOVEMENTS__RW"
+
+  /** Write bed assignments migrated and synchronised from NOMIS. For hmpps-prisoner-from-nomis-migration only. */
+  const val CELL_MOVEMENTS_SYNC_RW = "ROLE_CELL_MOVEMENTS__SYNC__RW"
 }
