@@ -11,7 +11,7 @@ import uk.gov.justice.digital.hmpps.changesomeonescellapi.service.PrisonerMergeS
  * Consumes HMPPS domain events from the `prisonerevents` SQS queue, which is subscribed to the shared
  * domain events topic (MAPA-438).
  *
- * Every cell movement carries the prisoner number it was recorded against. NOMIS changes which number
+ * Every cell movement and bed assignment carries the prisoner number it was recorded against. NOMIS changes which number
  * a booking belongs to in two ways, and both have to reach us or our records are stranded under a
  * number nothing will ask for:
  *
@@ -21,8 +21,9 @@ import uk.gov.justice.digital.hmpps.changesomeonescellapi.service.PrisonerMergeS
  *   prisoner number to another. Everything recorded against that booking moves with it.
  *
  * Booking moves are taken from the topic directly rather than through Syscon's NOMIS sync, as CSRA and
- * property do. Those services have a NOMIS sync and mapping tables to correct; this one has neither,
- * and already stores the booking id, so the event alone says exactly which rows to move.
+ * property do. Those services have mapping tables keyed by prisoner number to correct; this one does
+ * not. Its bed assignment mapping is keyed by NOMIS booking and sequence, which a move leaves unchanged,
+ * and it already knows each row's booking, so the event alone says exactly which rows to move.
  *
  * This is deliberately the *only* `@SqsListener` on the queue. A second listener class naming the same
  * queue would create a second container polling it, and SQS delivers each message to exactly one
