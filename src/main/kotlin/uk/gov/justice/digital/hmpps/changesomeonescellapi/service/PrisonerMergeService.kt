@@ -4,21 +4,27 @@ import com.microsoft.applicationinsights.TelemetryClient
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.repository.BedAssignmentRepository
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.repository.CellMovementNomisRepository
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.repository.CellMovementRepository
 
 /**
- * Keeps cell movements with the right prisoner when NOMIS changes which prisoner number a booking
- * belongs to (MAPA-438).
+ * Keeps cell movements and bed assignments with the right prisoner when NOMIS changes which prisoner
+ * number a booking belongs to (MAPA-438, MAPA-481).
  *
- * Both tables carry the prisoner number - `cell_movement` for the moves this service made, and
- * `cell_movement_nomis` for the reasons migrated from whereabouts. Neither has a unique constraint on
- * it and nothing is derived from it, so both changes are a straight update in place.
+ * Three tables carry the prisoner number - `cell_movement` for the moves this service made,
+ * `cell_movement_nomis` for the reasons migrated from whereabouts, and `bed_assignment` for the history
+ * copied from NOMIS. None has a unique constraint on it and nothing is derived from it, so every change
+ * is a straight update in place.
  *
  * NOMIS keeps the booking id when it moves a booking between prisoner numbers, so the
  * booking-and-bed-assignment read never notices either change. Anything that asks by prisoner number
  * does - a subject access request, Datahub, a per-prisoner history - which is why the number has to
  * follow the booking.
+ *
+ * The bed assignment sync reaches the same state when it next runs for the prisoner, because it matches
+ * rows on their NOMIS key whoever they are held against. Handling the event as well means the history is
+ * right from the moment of the merge, not from the prisoner's next sync, and the two cannot disagree.
  *
  * Both are safe to receive twice: the second run finds nothing left to move and records a no-op.
  */
@@ -27,6 +33,7 @@ import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.repository.CellMov
 class PrisonerMergeService(
   private val cellMovementRepository: CellMovementRepository,
   private val cellMovementNomisRepository: CellMovementNomisRepository,
+  private val bedAssignmentRepository: BedAssignmentRepository,
   private val telemetryClient: TelemetryClient,
 ) {
 
@@ -37,9 +44,17 @@ class PrisonerMergeService(
   fun prisonerMerged(retained: String, removed: String) {
     val movements = cellMovementRepository.reassignPrisonerNumber(removed = removed, retained = retained)
     val migrated = cellMovementNomisRepository.reassignPrisonerNumber(removed = removed, retained = retained)
+    val assignments = bedAssignmentRepository.reassignPrisonerNumber(removed = removed, retained = retained)
     val properties = mapOf("NOMS-MERGE-FROM" to removed, "NOMS-MERGE-TO" to retained)
-    track(TELEMETRY_MERGE, properties, movements, migrated)
-    log.info("Prisoner merge {} -> {} moved {} cell movement(s) and {} migrated reason(s)", removed, retained, movements, migrated)
+    track(TELEMETRY_MERGE, properties, movements, migrated, assignments)
+    log.info(
+      "Prisoner merge {} -> {} moved {} cell movement(s), {} migrated reason(s) and {} bed assignment(s)",
+      removed,
+      retained,
+      movements,
+      migrated,
+      assignments,
+    )
   }
 
   /**
@@ -52,13 +67,22 @@ class PrisonerMergeService(
   fun bookingMoved(bookingId: Long, movedFrom: String, movedTo: String) {
     val movements = cellMovementRepository.reassignBooking(bookingId = bookingId, movedTo = movedTo)
     val migrated = cellMovementNomisRepository.reassignBooking(bookingId = bookingId, movedTo = movedTo)
+    val assignments = bedAssignmentRepository.reassignBooking(bookingId = bookingId, movedTo = movedTo)
     val properties = mapOf(
       "bookingId" to bookingId.toString(),
       "movedFromNomsNumber" to movedFrom,
       "movedToNomsNumber" to movedTo,
     )
-    track(TELEMETRY_BOOKING_MOVED, properties, movements, migrated)
-    log.info("Booking {} moved {} -> {}: moved {} cell movement(s) and {} migrated reason(s)", bookingId, movedFrom, movedTo, movements, migrated)
+    track(TELEMETRY_BOOKING_MOVED, properties, movements, migrated, assignments)
+    log.info(
+      "Booking {} moved {} -> {}: moved {} cell movement(s), {} migrated reason(s) and {} bed assignment(s)",
+      bookingId,
+      movedFrom,
+      movedTo,
+      movements,
+      migrated,
+      assignments,
+    )
   }
 
   /**
@@ -66,13 +90,14 @@ class PrisonerMergeService(
    * are of prisoners never moved through DPS, and every redelivery is one too. Without it a no-op is
    * indistinguishable from the handler never running.
    */
-  private fun track(name: String, properties: Map<String, String>, movements: Int, migrated: Int) {
-    val eventName = if (movements + migrated == 0) "$name-no-op" else name
+  private fun track(name: String, properties: Map<String, String>, movements: Int, migrated: Int, assignments: Int) {
+    val eventName = if (movements + migrated + assignments == 0) "$name-no-op" else name
     telemetryClient.trackEvent(
       eventName,
       properties + mapOf(
         "cellMovementsMoved" to movements.toString(),
         "migratedReasonsMoved" to migrated.toString(),
+        "bedAssignmentsMoved" to assignments.toString(),
       ),
       null,
     )

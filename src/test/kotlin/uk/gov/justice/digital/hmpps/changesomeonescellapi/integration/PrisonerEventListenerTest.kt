@@ -17,9 +17,14 @@ import org.mockito.kotlin.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.BedAssignmentEntity
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.BedAssignmentNomisEntity
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.BedAssignmentSource
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementEntity
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementNomisEntity
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.CellMovementStatus
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.repository.BedAssignmentNomisRepository
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.repository.BedAssignmentRepository
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.repository.CellMovementNomisRepository
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.repository.CellMovementRepository
 import uk.gov.justice.hmpps.sqs.HmppsQueue
@@ -43,6 +48,12 @@ class PrisonerEventListenerTest : IntegrationTestBase() {
   private lateinit var cellMovementNomisRepository: CellMovementNomisRepository
 
   @Autowired
+  private lateinit var bedAssignmentRepository: BedAssignmentRepository
+
+  @Autowired
+  private lateinit var bedAssignmentNomisRepository: BedAssignmentNomisRepository
+
+  @Autowired
   private lateinit var hmppsQueueService: HmppsQueueService
 
   @MockitoBean
@@ -53,6 +64,9 @@ class PrisonerEventListenerTest : IntegrationTestBase() {
 
   @BeforeEach
   fun setUp() {
+    // Bed assignments first: they can reference a cell movement.
+    bedAssignmentNomisRepository.deleteAll()
+    bedAssignmentRepository.deleteAll()
     cellMovementRepository.deleteAll()
     cellMovementNomisRepository.deleteAll()
     queue.sqsClient.purgeQueue(PurgeQueueRequest.builder().queueUrl(queue.queueUrl).build()).get()
@@ -60,11 +74,14 @@ class PrisonerEventListenerTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `a merge moves every movement and migrated reason from the retired number to the retained one`() {
+  fun `a merge moves every movement, migrated reason and bed assignment from the retired number to the retained one`() {
     cellMovementRepository.save(aCellMove(REMOVED, BOOKING_ID))
     cellMovementRepository.save(aCellMove(REMOVED, OTHER_BOOKING_ID))
     cellMovementNomisRepository.save(aMigratedMove(REMOVED, BOOKING_ID))
     cellMovementRepository.save(aCellMove(SOMEONE_ELSE, 999L))
+    aBedAssignment(REMOVED, BOOKING_ID, sequence = 1)
+    aBedAssignment(REMOVED, OTHER_BOOKING_ID, sequence = 1)
+    aBedAssignment(SOMEONE_ELSE, 999L, sequence = 1)
 
     publishMerge(retained = RETAINED, removed = REMOVED)
 
@@ -72,6 +89,8 @@ class PrisonerEventListenerTest : IntegrationTestBase() {
     assertThat(cellMovementRepository.findAll().map { it.prisonerNumber })
       .containsExactlyInAnyOrder(RETAINED, RETAINED, SOMEONE_ELSE)
     assertThat(cellMovementNomisRepository.findAll().map { it.prisonerNumber }).containsExactly(RETAINED)
+    assertThat(bedAssignmentRepository.findAll().map { it.prisonerNumber })
+      .containsExactlyInAnyOrder(RETAINED, RETAINED, SOMEONE_ELSE)
     verify(telemetryClient).trackEvent(
       eq("cell-movement-prisoner-merge"),
       eq(
@@ -80,6 +99,7 @@ class PrisonerEventListenerTest : IntegrationTestBase() {
           "NOMS-MERGE-TO" to RETAINED,
           "cellMovementsMoved" to "2",
           "migratedReasonsMoved" to "1",
+          "bedAssignmentsMoved" to "2",
         ),
       ),
       isNull(),
@@ -118,6 +138,8 @@ class PrisonerEventListenerTest : IntegrationTestBase() {
     cellMovementRepository.save(aCellMove(REMOVED, OTHER_BOOKING_ID))
     cellMovementNomisRepository.save(aMigratedMove(REMOVED, BOOKING_ID))
     cellMovementNomisRepository.save(aMigratedMove(REMOVED, OTHER_BOOKING_ID))
+    val moving = listOf(aBedAssignment(REMOVED, BOOKING_ID, sequence = 1), aBedAssignment(REMOVED, BOOKING_ID, sequence = 2))
+    val staying = aBedAssignment(REMOVED, OTHER_BOOKING_ID, sequence = 1)
 
     publishBookingMoved(bookingId = BOOKING_ID, movedFrom = REMOVED, movedTo = RETAINED)
 
@@ -126,6 +148,8 @@ class PrisonerEventListenerTest : IntegrationTestBase() {
       .isEqualTo(mapOf(BOOKING_ID to RETAINED, OTHER_BOOKING_ID to REMOVED))
     assertThat(cellMovementNomisRepository.findAll().associate { it.bookingId to it.prisonerNumber })
       .isEqualTo(mapOf(BOOKING_ID to RETAINED, OTHER_BOOKING_ID to REMOVED))
+    assertThat(bedAssignmentRepository.findAll().associate { it.id to it.prisonerNumber })
+      .isEqualTo(mapOf(moving[0].id to RETAINED, moving[1].id to RETAINED, staying.id to REMOVED))
     verify(telemetryClient).trackEvent(
       eq("cell-movement-booking-moved"),
       eq(
@@ -135,6 +159,7 @@ class PrisonerEventListenerTest : IntegrationTestBase() {
           "movedToNomsNumber" to RETAINED,
           "cellMovementsMoved" to "1",
           "migratedReasonsMoved" to "1",
+          "bedAssignmentsMoved" to "2",
         ),
       ),
       isNull(),
@@ -154,6 +179,7 @@ class PrisonerEventListenerTest : IntegrationTestBase() {
   @Test
   fun `a booking move received twice changes nothing the second time`() {
     cellMovementRepository.save(aCellMove(REMOVED, BOOKING_ID))
+    aBedAssignment(REMOVED, BOOKING_ID, sequence = 1)
 
     publishBookingMoved(bookingId = BOOKING_ID, movedFrom = REMOVED, movedTo = RETAINED)
     awaitTelemetry("cell-movement-booking-moved")
@@ -161,6 +187,18 @@ class PrisonerEventListenerTest : IntegrationTestBase() {
     awaitTelemetry("cell-movement-booking-moved-no-op")
 
     assertThat(cellMovementRepository.findAll().single().prisonerNumber).isEqualTo(RETAINED)
+    assertThat(bedAssignmentRepository.findAll().single().prisonerNumber).isEqualTo(RETAINED)
+  }
+
+  @Test
+  fun `a booking move leaves a bed assignment DPS recorded alone`() {
+    // Only NOMIS rows carry a booking. One DPS records itself has none for a NOMIS booking move to match.
+    bedAssignmentRepository.save(aBedAssignmentEntity(REMOVED, BedAssignmentSource.DPS))
+
+    publishBookingMoved(bookingId = BOOKING_ID, movedFrom = REMOVED, movedTo = RETAINED)
+
+    awaitTelemetry("cell-movement-booking-moved-no-op")
+    assertThat(bedAssignmentRepository.findAll().single().prisonerNumber).isEqualTo(REMOVED)
   }
 
   @Test
@@ -232,6 +270,27 @@ class PrisonerEventListenerTest : IntegrationTestBase() {
     occurredAt = LocalDateTime.now(clock),
     recordedBy = "TEST_USER",
     status = CellMovementStatus.COMPLETED,
+  )
+
+  private fun aBedAssignment(prisonerNumber: String, bookingId: Long, sequence: Int): BedAssignmentEntity = bedAssignmentRepository.save(aBedAssignmentEntity(prisonerNumber, BedAssignmentSource.NOMIS)).also {
+    bedAssignmentNomisRepository.save(
+      BedAssignmentNomisEntity(
+        bedAssignment = it,
+        nomisBookingId = bookingId,
+        nomisSequence = sequence,
+        livingUnitId = -3009L,
+        livingUnitDescription = "MDI-1-1-015",
+        migratedAt = LocalDateTime.now(clock),
+      ),
+    )
+  }
+
+  private fun aBedAssignmentEntity(prisonerNumber: String, source: BedAssignmentSource) = BedAssignmentEntity(
+    prisonerNumber = prisonerNumber,
+    locationKey = "MDI-1-1-015",
+    startAt = LocalDateTime.now(clock),
+    source = source,
+    recordedBy = "TEST_USER",
   )
 
   private fun aMigratedMove(prisonerNumber: String?, bookingId: Long) = CellMovementNomisEntity(
