@@ -38,8 +38,6 @@ generic-service:
   #       https://user-guide.cloud-platform.service.justice.gov.uk/documentation/networking/modsecurity.html#modsecurity-web-application-firewall
 
 
-# CloudPlatform AlertManager receiver to route prometheus alerts to slack
-# See https://user-guide.cloud-platform.service.justice.gov.uk/documentation/monitoring-an-app/how-to-create-alarms.html#creating-your-own-custom-alerts
+# Alert routing is managed through the Developer Portal service catalogue.
 generic-prometheus-alerts:
   businessHoursOnly: true
-  alertSeverity: move-a-prisoner-alerts-nonprod
