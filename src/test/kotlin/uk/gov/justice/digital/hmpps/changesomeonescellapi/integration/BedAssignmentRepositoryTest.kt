@@ -89,6 +89,15 @@ class BedAssignmentRepositoryTest : IntegrationTestBase() {
   }
 
   @Test
+  fun `finds only the requested prisoner's assignments`() {
+    saveFromNomis(sequence = 1)
+    saveFromNomis(sequence = 2, prisonerNumber = "B5678BB")
+
+    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt("A1234AA")).hasSize(1)
+    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt("C9999CC")).isEmpty()
+  }
+
+  @Test
   fun `rejects a second copy of the same NOMIS row`() {
     saveFromNomis(sequence = 1)
 
@@ -116,6 +125,7 @@ class BedAssignmentRepositoryTest : IntegrationTestBase() {
 
   private fun saveFromNomis(
     sequence: Int,
+    prisonerNumber: String = "A1234AA",
     locationId: UUID? = cellId,
     locationKey: String = "MDI-A-1-001",
     livingUnitDescription: String? = locationKey,
@@ -124,7 +134,7 @@ class BedAssignmentRepositoryTest : IntegrationTestBase() {
   ): BedAssignmentEntity {
     val assignment = bedAssignmentRepository.save(
       BedAssignmentEntity(
-        prisonerNumber = "A1234AA",
+        prisonerNumber = prisonerNumber,
         locationId = locationId,
         locationKey = locationKey,
         startAt = startAt,

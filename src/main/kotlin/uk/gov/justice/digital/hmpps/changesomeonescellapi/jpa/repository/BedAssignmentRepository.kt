@@ -10,8 +10,7 @@ import java.util.UUID
 
 /**
  * Written only by the NOMIS to DPS migration and sync during coexistence (MAPA-481), apart from the
- * prisoner number following merges and booking moves. Nothing reads it yet; the reads arrive with the
- * endpoints that need them.
+ * prisoner number following merges and booking moves.
  */
 @Repository
 interface BedAssignmentRepository : JpaRepository<BedAssignmentEntity, UUID> {
