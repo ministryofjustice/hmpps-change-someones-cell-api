@@ -5,6 +5,7 @@ import jakarta.validation.ValidationException
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.BedAssignment
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.BedAssignmentNomisMapping
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.BedAssignmentSyncResponse
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.NomisBedAssignment
@@ -45,6 +46,10 @@ class BedAssignmentSyncService(
 
   fun sync(prisonerNumber: String, assignments: List<NomisBedAssignment>): BedAssignmentSyncResponse = replace(prisonerNumber, assignments)
     .also { track("bed-assignments-synchronised", prisonerNumber, it) }
+
+  @Transactional(readOnly = true)
+  fun findAll(prisonerNumber: String): List<BedAssignment> = bedAssignmentRepository
+    .findAllByPrisonerNumberOrderByStartAtAscIdAsc(prisonerNumber).map { it.toDto() }
 
   private fun replace(prisonerNumber: String, assignments: List<NomisBedAssignment>): BedAssignmentSyncResponse {
     assignments.groupBy { it.bookingId to it.sequence }.filterValues { it.size > 1 }.keys.firstOrNull()?.let { (bookingId, sequence) ->
@@ -131,6 +136,20 @@ class BedAssignmentSyncService(
   // A move this service made through prison-api comes back from NOMIS as an ordinary row. Linking it
   // here records which assignments DPS opened, ahead of DPS writing them directly.
   private fun NomisBedAssignment.cellMovementId() = cellMovementRepository.findFirstByBookingIdAndBedAssignmentSequenceOrderByOccurredAtDesc(bookingId, sequence)?.id
+
+  private fun BedAssignmentEntity.toDto() = BedAssignment(
+    id = id!!,
+    prisonerNumber = prisonerNumber,
+    locationId = locationId,
+    locationKey = locationKey,
+    startAt = startAt,
+    startReason = startReason,
+    endAt = endAt,
+    endReason = endReason,
+    source = source,
+    recordedBy = recordedBy,
+    cellMovementId = cellMovementId,
+  )
 
   private fun BedAssignmentNomisEntity.toMapping() = BedAssignmentNomisMapping(id = bedAssignmentId!!, bookingId = nomisBookingId, sequence = nomisSequence)
 

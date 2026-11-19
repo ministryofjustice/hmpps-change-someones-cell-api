@@ -9,13 +9,12 @@ import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.BedAssignmentEntit
 import java.util.UUID
 
 /**
- * Written only by the NOMIS to DPS migration and sync during coexistence (MAPA-481), apart from the
- * prisoner number following merges and booking moves. Nothing reads it yet; the reads arrive with the
- * endpoints that need them.
+ * Read and written only by the NOMIS migration and sync during coexistence (MAPA-481), apart from the
+ * prisoner number following merges and booking moves.
  */
 @Repository
 interface BedAssignmentRepository : JpaRepository<BedAssignmentEntity, UUID> {
-  fun findAllByPrisonerNumberOrderByStartAt(prisonerNumber: String): List<BedAssignmentEntity>
+  fun findAllByPrisonerNumberOrderByStartAtAscIdAsc(prisonerNumber: String): List<BedAssignmentEntity>
 
   /** Moves every assignment from a prisoner number NOMIS has merged away. Returns the rows moved. */
   @Modifying

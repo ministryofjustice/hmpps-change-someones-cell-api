@@ -80,12 +80,22 @@ class BedAssignmentRepositoryTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `finds a prisoner's assignments in start order`() {
-    saveFromNomis(sequence = 2, startAt = moved)
-    saveFromNomis(sequence = 1, startAt = firstAssigned, endAt = moved)
+  fun `finds a prisoner's assignments in start and id order`() {
+    val saved1 = saveFromNomis(sequence = 3, startAt = moved)
+    val saved2 = saveFromNomis(sequence = 2, startAt = moved)
+    val saved3 = saveFromNomis(sequence = 1, startAt = firstAssigned, endAt = moved)
 
-    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt("A1234AA").map { it.startAt })
-      .containsExactly(firstAssigned, moved)
+    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc("A1234AA").map { it.id })
+      .containsExactly(saved3.id, saved1.id, saved2.id)
+  }
+
+  @Test
+  fun `finds only the requested prisoner's assignments`() {
+    saveFromNomis(sequence = 1)
+    saveFromNomis(sequence = 2, prisonerNumber = "B5678BB")
+
+    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc("A1234AA")).hasSize(1)
+    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc("C9999CC")).isEmpty()
   }
 
   @Test
@@ -116,6 +126,7 @@ class BedAssignmentRepositoryTest : IntegrationTestBase() {
 
   private fun saveFromNomis(
     sequence: Int,
+    prisonerNumber: String = "A1234AA",
     locationId: UUID? = cellId,
     locationKey: String = "MDI-A-1-001",
     livingUnitDescription: String? = locationKey,
@@ -124,7 +135,7 @@ class BedAssignmentRepositoryTest : IntegrationTestBase() {
   ): BedAssignmentEntity {
     val assignment = bedAssignmentRepository.save(
       BedAssignmentEntity(
-        prisonerNumber = "A1234AA",
+        prisonerNumber = prisonerNumber,
         locationId = locationId,
         locationKey = locationKey,
         startAt = startAt,

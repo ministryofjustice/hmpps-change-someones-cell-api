@@ -3,6 +3,7 @@ package uk.gov.justice.digital.hmpps.changesomeonescellapi.dto
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.jpa.BedAssignmentSource
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -76,4 +77,40 @@ data class BedAssignmentSyncResponse(
 
   @get:Schema(description = "Assignments removed because NOMIS no longer holds them against this prisoner")
   val deleted: List<BedAssignmentNomisMapping>,
+)
+
+@Schema(description = "A bed assignment: a period a prisoner was assigned to a cell. An open one (no endAt) is current")
+data class BedAssignment(
+  @get:Schema(description = "The DPS bed assignment id", example = "0199e3c0-0000-7000-8000-00000000000a")
+  val id: UUID,
+
+  @get:Schema(description = "The prisoner number", example = "A1234BC")
+  val prisonerNumber: String,
+
+  @get:Schema(description = "The locations-inside-prison id")
+  val locationId: UUID?,
+
+  @get:Schema(description = "The location key, or the NOMIS description", example = "MDI-A-1-001")
+  val locationKey: String,
+
+  @get:Schema(description = "When the assignment began", example = "2023-05-01T09:15:00")
+  val startAt: LocalDateTime,
+
+  @get:Schema(description = "The reason code (domain CHG_HOUS_RSN) the assignment began", example = "ADM")
+  val startReason: String?,
+
+  @get:Schema(description = "When the assignment ended, null for a current assignment", example = "2023-06-10T14:30:00")
+  val endAt: LocalDateTime?,
+
+  @get:Schema(description = "The reason code (domain CHG_HOUS_RSN) the assignment ended", example = "GM")
+  val endReason: String?,
+
+  @get:Schema(description = "Whether the assignment came from NOMIS or was made by DPS")
+  val source: BedAssignmentSource,
+
+  @get:Schema(description = "The user who recorded the assignment", example = "NQP56Y")
+  val recordedBy: String,
+
+  @get:Schema(description = "The cell movement that opened this assignment, when this service made it")
+  val cellMovementId: UUID?,
 )

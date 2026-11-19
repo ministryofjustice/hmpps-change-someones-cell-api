@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.core.ParameterizedTypeReference
+import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.BedAssignment
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.BedAssignmentNomisMapping
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.BedAssignmentSyncResponse
 import uk.gov.justice.digital.hmpps.changesomeonescellapi.dto.NomisBedAssignment
@@ -39,7 +40,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
   private val otherCellId = UUID.fromString("0199e3c0-0000-7000-8000-000000000002")
   private val admitted = LocalDateTime.parse("2023-05-01T09:15:00")
   private val moved = LocalDateTime.parse("2023-06-10T14:30:00")
-  private val now = LocalDateTime.now(TestBase.clock)
+  private val now = LocalDateTime.now(clock)
 
   // Cleared before and after, bed assignments first: they can reference a cell movement.
   @BeforeEach
@@ -77,12 +78,27 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
         .exchange()
         .expectStatus().isForbidden
     }
+
+    @Test
+    fun `get returns 401 without a token`() {
+      webTestClient.get().uri("/nomis-sync/bed-assignments/$PRISONER_NUMBER")
+        .exchange()
+        .expectStatus().isUnauthorized
+    }
+
+    @Test
+    fun `get returns 403 without the sync role`() {
+      webTestClient.get().uri("/nomis-sync/bed-assignments/$PRISONER_NUMBER")
+        .headers(setAuthorisation(roles = listOf("ROLE_CELL_MOVEMENTS__RW")))
+        .exchange()
+        .expectStatus().isForbidden
+    }
   }
 
   @Nested
   inner class Validation {
     @Test
-    fun `returns 400 for a badly formed prisoner number`() {
+    fun `sync returns 400 for a badly formed prisoner number`() {
       webTestClient.put().uri("/nomis-sync/bed-assignments/sync/not-a-prisoner")
         .headers(setAuthorisation(roles = syncRole))
         .bodyValue(listOf(firstCell()))
@@ -91,7 +107,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     }
 
     @Test
-    fun `returns 400 when the same NOMIS row is sent twice`() {
+    fun `sync returns 400 when the same NOMIS row is sent twice`() {
       webTestClient.put().uri("/nomis-sync/bed-assignments/sync/$PRISONER_NUMBER")
         .headers(setAuthorisation(roles = syncRole))
         .bodyValue(listOf(firstCell(), firstCell()))
@@ -105,7 +121,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     }
 
     @Test
-    fun `returns 400 when a row has no creating user`() {
+    fun `sync returns 400 when a row has no creating user`() {
       webTestClient.put().uri("/nomis-sync/bed-assignments/sync/$PRISONER_NUMBER")
         .headers(setAuthorisation(roles = syncRole))
         .bodyValue(listOf(firstCell().copy(createdBy = " ")))
@@ -114,10 +130,18 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     }
 
     @Test
-    fun `returns 400 when a reason code is too long`() {
+    fun `sync returns 400 when a reason code is too long`() {
       webTestClient.put().uri("/nomis-sync/bed-assignments/sync/$PRISONER_NUMBER")
         .headers(setAuthorisation(roles = syncRole))
         .bodyValue(listOf(firstCell().copy(assignmentReasonCode = "THIRTEEN_CHAR")))
+        .exchange()
+        .expectStatus().isBadRequest
+    }
+
+    @Test
+    fun `get returns 400 for a badly formed prisoner number`() {
+      webTestClient.get().uri("/nomis-sync/bed-assignments/not-a-prisoner")
+        .headers(setAuthorisation(roles = syncRole))
         .exchange()
         .expectStatus().isBadRequest
     }
@@ -129,7 +153,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     fun `stores each NOMIS row and returns its DPS id with the NOMIS key`() {
       val mappings = migrate(firstCell(), secondCell())
 
-      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)
+      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)
       assertThat(mappings).containsExactlyInAnyOrder(
         BedAssignmentNomisMapping(id = stored[0].id!!, bookingId = BOOKING_ID, sequence = 1),
         BedAssignmentNomisMapping(id = stored[1].id!!, bookingId = BOOKING_ID, sequence = 2),
@@ -160,7 +184,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     fun `keeps a row whose location has no locations-inside-prison equivalent`() {
       migrate(firstCell().copy(locationId = null, livingUnitDescription = "MDI-OLD-WING-1"))
 
-      with(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER).single()) {
+      with(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER).single()) {
         assertThat(locationId).isNull()
         assertThat(locationKey).isEqualTo("MDI-OLD-WING-1")
       }
@@ -170,7 +194,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     fun `keeps a row whose location NOMIS no longer holds`() {
       migrate(firstCell().copy(locationId = null, livingUnitDescription = null))
 
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER).single().locationKey).isEqualTo("-3009")
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER).single().locationKey).isEqualTo("-3009")
       assertThat(bedAssignmentNomisRepository.findByNomisBookingIdAndNomisSequence(BOOKING_ID, 1)!!.livingUnitDescription).isNull()
     }
 
@@ -189,7 +213,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
 
       migrate(firstCell(), secondCell())
 
-      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)
+      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)
       assertThat(stored.map { it.cellMovementId }).containsExactly(null, movement.id)
     }
   }
@@ -211,14 +235,14 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
       assertThat(result.created.single().sequence).isEqualTo(3)
       assertThat(result.deleted).isEmpty()
 
-      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)
+      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)
       assertThat(stored.map { it.id }).containsExactly(migrated[1]!!.id, migrated[2]!!.id, result.created.single().id)
       assertThat(stored[1].endAt).isEqualTo(now.minusDays(1))
 
       val afterRemoval = sync(PRISONER_NUMBER, firstCell(), secondCell())
 
       assertThat(afterRemoval.deleted).containsExactly(result.created.single())
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)).hasSize(2)
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)).hasSize(2)
       assertThat(bedAssignmentNomisRepository.findByNomisBookingIdAndNomisSequence(BOOKING_ID, 3)).isNull()
     }
 
@@ -254,8 +278,8 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
 
       assertThat(result.updated).containsExactlyInAnyOrderElementsOf(migrated)
       assertThat(result.created).isEmpty()
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)).isEmpty()
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(OTHER_PRISONER_NUMBER).map { it.id })
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)).isEmpty()
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(OTHER_PRISONER_NUMBER).map { it.id })
         .containsExactlyInAnyOrderElementsOf(migrated.map { it.id })
     }
 
@@ -276,10 +300,54 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
 
       sync(PRISONER_NUMBER, firstCell())
 
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(OTHER_PRISONER_NUMBER)).hasSize(1)
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)).hasSize(1)
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(OTHER_PRISONER_NUMBER)).hasSize(1)
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)).hasSize(1)
     }
   }
+
+  @Nested
+  inner class Get {
+    @Test
+    fun `returns the prisoner's assignments oldest first`() {
+      val mappings = migrate(secondCell(), firstCell()).associateBy { it.sequence }
+
+      val result = getAssignments(PRISONER_NUMBER)
+
+      assertThat(result.map { it.id }).containsExactly(mappings.getValue(1).id, mappings.getValue(2).id)
+      with(result[0]) {
+        assertThat(prisonerNumber).isEqualTo(PRISONER_NUMBER)
+        assertThat(locationId).isEqualTo(cellId)
+        assertThat(locationKey).isEqualTo("MDI-A-1-001")
+        assertThat(startAt).isEqualTo(admitted)
+        assertThat(startReason).isEqualTo("ADM")
+        assertThat(endAt).isEqualTo(moved)
+        assertThat(source).isEqualTo(BedAssignmentSource.NOMIS)
+        assertThat(recordedBy).isEqualTo("NOMIS_USER")
+      }
+      assertThat(result[1].endAt).isNull()
+    }
+
+    @Test
+    fun `returns only the requested prisoner's assignments`() {
+      sync(OTHER_PRISONER_NUMBER, firstCell().copy(bookingId = OTHER_BOOKING_ID))
+      migrate(firstCell())
+
+      assertThat(getAssignments(PRISONER_NUMBER)).hasSize(1).allMatch { it.prisonerNumber == PRISONER_NUMBER }
+    }
+
+    @Test
+    fun `returns an empty list for a prisoner with no assignments`() {
+      assertThat(getAssignments(PRISONER_NUMBER)).isEmpty()
+    }
+  }
+
+  private fun getAssignments(prisonerNumber: String): List<BedAssignment> = webTestClient.get()
+    .uri("/nomis-sync/bed-assignments/$prisonerNumber")
+    .headers(setAuthorisation(roles = syncRole))
+    .exchange()
+    .expectStatus().isOk
+    .expectBody(object : ParameterizedTypeReference<List<BedAssignment>>() {})
+    .returnResult().responseBody!!
 
   private fun migrate(vararg assignments: NomisBedAssignment): List<BedAssignmentNomisMapping> = webTestClient.post()
     .uri("/nomis-sync/bed-assignments/migrate/$PRISONER_NUMBER")
@@ -299,7 +367,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     .expectBody(BedAssignmentSyncResponse::class.java)
     .returnResult().responseBody!!
 
-  private fun snapshot() = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER).map { it.toRow() }
+  private fun snapshot() = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER).map { it.toRow() }
 
   private data class Row(val id: UUID?, val locationId: UUID?, val locationKey: String, val startAt: LocalDateTime, val endAt: LocalDateTime?)
 
