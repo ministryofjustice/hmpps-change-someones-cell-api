@@ -48,7 +48,8 @@ class BedAssignmentSyncService(
     .also { track("bed-assignments-synchronised", prisonerNumber, it) }
 
   @Transactional(readOnly = true)
-  fun findAll(prisonerNumber: String): List<BedAssignment> = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(prisonerNumber).map { it.toDto() }
+  fun findAll(prisonerNumber: String): List<BedAssignment> = bedAssignmentRepository
+    .findAllByPrisonerNumberOrderByStartAtAscIdAsc(prisonerNumber).map { it.toDto() }
 
   private fun replace(prisonerNumber: String, assignments: List<NomisBedAssignment>): BedAssignmentSyncResponse {
     assignments.groupBy { it.bookingId to it.sequence }.filterValues { it.size > 1 }.keys.firstOrNull()?.let { (bookingId, sequence) ->

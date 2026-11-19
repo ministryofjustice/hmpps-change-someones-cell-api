@@ -103,10 +103,9 @@ class BedAssignmentNomisSyncResource(
   ): BedAssignmentSyncResponse = bedAssignmentSyncService.sync(prisonerNumber, assignments)
 
   @GetMapping("/{prisonerNumber}")
-  @PreAuthorize("hasAnyRole('${Roles.CELL_MOVEMENTS_RO}', '${Roles.CELL_MOVEMENTS_SYNC_RW}')")
   @Operation(
     summary = "Get a prisoner's bed assignments",
-    description = "Every bed assignment held for the prisoner, oldest first. Requires role ROLE_CELL_MOVEMENTS__RO or ROLE_CELL_MOVEMENTS__SYNC__RW",
+    description = "Every bed assignment held for the prisoner, oldest first. Requires role ROLE_CELL_MOVEMENTS__SYNC__RW",
     responses = [
       ApiResponse(responseCode = "200", description = "The prisoner's bed assignments, empty if there are none"),
       ApiResponse(

@@ -87,7 +87,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     }
 
     @Test
-    fun `get returns 403 without the read or sync role`() {
+    fun `get returns 403 without the sync role`() {
       webTestClient.get().uri("/nomis-sync/bed-assignments/$PRISONER_NUMBER")
         .headers(setAuthorisation(roles = listOf("ROLE_CELL_MOVEMENTS__RW")))
         .exchange()
@@ -153,7 +153,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     fun `stores each NOMIS row and returns its DPS id with the NOMIS key`() {
       val mappings = migrate(firstCell(), secondCell())
 
-      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)
+      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)
       assertThat(mappings).containsExactlyInAnyOrder(
         BedAssignmentNomisMapping(id = stored[0].id!!, bookingId = BOOKING_ID, sequence = 1),
         BedAssignmentNomisMapping(id = stored[1].id!!, bookingId = BOOKING_ID, sequence = 2),
@@ -184,7 +184,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     fun `keeps a row whose location has no locations-inside-prison equivalent`() {
       migrate(firstCell().copy(locationId = null, livingUnitDescription = "MDI-OLD-WING-1"))
 
-      with(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER).single()) {
+      with(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER).single()) {
         assertThat(locationId).isNull()
         assertThat(locationKey).isEqualTo("MDI-OLD-WING-1")
       }
@@ -194,7 +194,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     fun `keeps a row whose location NOMIS no longer holds`() {
       migrate(firstCell().copy(locationId = null, livingUnitDescription = null))
 
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER).single().locationKey).isEqualTo("-3009")
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER).single().locationKey).isEqualTo("-3009")
       assertThat(bedAssignmentNomisRepository.findByNomisBookingIdAndNomisSequence(BOOKING_ID, 1)!!.livingUnitDescription).isNull()
     }
 
@@ -213,7 +213,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
 
       migrate(firstCell(), secondCell())
 
-      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)
+      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)
       assertThat(stored.map { it.cellMovementId }).containsExactly(null, movement.id)
     }
   }
@@ -235,14 +235,14 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
       assertThat(result.created.single().sequence).isEqualTo(3)
       assertThat(result.deleted).isEmpty()
 
-      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)
+      val stored = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)
       assertThat(stored.map { it.id }).containsExactly(migrated[1]!!.id, migrated[2]!!.id, result.created.single().id)
       assertThat(stored[1].endAt).isEqualTo(now.minusDays(1))
 
       val afterRemoval = sync(PRISONER_NUMBER, firstCell(), secondCell())
 
       assertThat(afterRemoval.deleted).containsExactly(result.created.single())
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)).hasSize(2)
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)).hasSize(2)
       assertThat(bedAssignmentNomisRepository.findByNomisBookingIdAndNomisSequence(BOOKING_ID, 3)).isNull()
     }
 
@@ -278,8 +278,8 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
 
       assertThat(result.updated).containsExactlyInAnyOrderElementsOf(migrated)
       assertThat(result.created).isEmpty()
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)).isEmpty()
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(OTHER_PRISONER_NUMBER).map { it.id })
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)).isEmpty()
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(OTHER_PRISONER_NUMBER).map { it.id })
         .containsExactlyInAnyOrderElementsOf(migrated.map { it.id })
     }
 
@@ -300,8 +300,8 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
 
       sync(PRISONER_NUMBER, firstCell())
 
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(OTHER_PRISONER_NUMBER)).hasSize(1)
-      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER)).hasSize(1)
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(OTHER_PRISONER_NUMBER)).hasSize(1)
+      assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER)).hasSize(1)
     }
   }
 
@@ -325,17 +325,6 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
         assertThat(recordedBy).isEqualTo("NOMIS_USER")
       }
       assertThat(result[1].endAt).isNull()
-    }
-
-    @Test
-    fun `can be read with the read-only role`() {
-      migrate(firstCell())
-
-      webTestClient.get().uri("/nomis-sync/bed-assignments/$PRISONER_NUMBER")
-        .headers(setAuthorisation(roles = listOf("ROLE_CELL_MOVEMENTS__RO")))
-        .exchange()
-        .expectStatus().isOk
-        .expectBody().jsonPath("$.length()").isEqualTo(1)
     }
 
     @Test
@@ -378,7 +367,7 @@ class BedAssignmentNomisSyncResourceTest : IntegrationTestBase() {
     .expectBody(BedAssignmentSyncResponse::class.java)
     .returnResult().responseBody!!
 
-  private fun snapshot() = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt(PRISONER_NUMBER).map { it.toRow() }
+  private fun snapshot() = bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc(PRISONER_NUMBER).map { it.toRow() }
 
   private data class Row(val id: UUID?, val locationId: UUID?, val locationKey: String, val startAt: LocalDateTime, val endAt: LocalDateTime?)
 

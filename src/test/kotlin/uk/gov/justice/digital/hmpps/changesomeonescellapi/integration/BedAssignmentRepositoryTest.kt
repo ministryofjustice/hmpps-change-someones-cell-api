@@ -80,12 +80,13 @@ class BedAssignmentRepositoryTest : IntegrationTestBase() {
   }
 
   @Test
-  fun `finds a prisoner's assignments in start order`() {
-    saveFromNomis(sequence = 2, startAt = moved)
-    saveFromNomis(sequence = 1, startAt = firstAssigned, endAt = moved)
+  fun `finds a prisoner's assignments in start and id order`() {
+    val saved1 = saveFromNomis(sequence = 3, startAt = moved)
+    val saved2 = saveFromNomis(sequence = 2, startAt = moved)
+    val saved3 = saveFromNomis(sequence = 1, startAt = firstAssigned, endAt = moved)
 
-    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt("A1234AA").map { it.startAt })
-      .containsExactly(firstAssigned, moved)
+    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc("A1234AA").map { it.id })
+      .containsExactly(saved3.id, saved1.id, saved2.id)
   }
 
   @Test
@@ -93,8 +94,8 @@ class BedAssignmentRepositoryTest : IntegrationTestBase() {
     saveFromNomis(sequence = 1)
     saveFromNomis(sequence = 2, prisonerNumber = "B5678BB")
 
-    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt("A1234AA")).hasSize(1)
-    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAt("C9999CC")).isEmpty()
+    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc("A1234AA")).hasSize(1)
+    assertThat(bedAssignmentRepository.findAllByPrisonerNumberOrderByStartAtAscIdAsc("C9999CC")).isEmpty()
   }
 
   @Test
