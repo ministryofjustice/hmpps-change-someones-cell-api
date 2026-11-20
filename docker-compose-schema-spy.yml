@@ -7,7 +7,7 @@ services:
   # No localstack here, unlike the sibling services: nothing in this service uses SQS or SNS. The
   # localstack in docker-compose.yml is unused template scaffolding.
   postgres:
-    image: postgres:18
+    image: postgres:19
     networks:
       - hmpps
     container_name: change-someones-cell-schema-spy-postgres
